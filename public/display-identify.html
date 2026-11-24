@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>辨認螢幕</title>
+  <style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07101d;color:#f4f8ff;font-family:"Microsoft JhengHei","Noto Sans TC",sans-serif}body{display:grid;place-items:center;text-align:center}.panel{border:2px solid #64d8c5;border-radius:24px;padding:6vw 10vw;box-shadow:0 0 80px #42c8b055;background:#12233a}.label{font-size:clamp(20px,4vw,48px);color:#8fe6d8}.role{font-size:clamp(54px,12vw,160px);font-weight:900;letter-spacing:.04em;margin:22px 0}.hint{font-size:clamp(16px,2.5vw,28px);color:#bdcde1}</style>
+</head>
+<body><main class="panel"><div class="label">704 螢幕辨認</div><div id="role" class="role">螢幕</div><div class="hint">確認這個標記出現在哪一面實體顯示器</div></main><script>document.querySelector('#role').textContent=new URLSearchParams(location.search).get('role')||'螢幕';</script></body>
+</html>

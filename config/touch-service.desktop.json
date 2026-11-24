@@ -1,0 +1,12 @@
+{
+  "serviceRoot": "",
+  "bundledResourceName": "touch-service",
+  "bundledDevelopmentRelativePath": "runtime/touch-service",
+  "sourceConfigRelativePath": "config.json",
+  "executableRelativePath": "publish/win-x64/TouchService.exe",
+  "venueProfileRelativePath": "venues/704.json",
+  "webSocketUrl": "ws://127.0.0.1:20111/",
+  "autoStart": true,
+  "probeTimeoutMs": 1500,
+  "startupTimeoutMs": 12000
+}

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#05080e">
+  <title>704 腦力競賽｜遊戲畫面</title>
+  <link rel="stylesheet" href="/stage.css">
+</head>
+<body>
+  <main id="screen" aria-live="polite">
+    <div id="projection-canvas">
+      <div id="venue">
+        <div id="floor" class="floor"></div>
+        <div id="zones"></div>
+        <div id="overlay" class="overlay" hidden></div>
+      </div>
+    </div>
+    <div id="connection" class="connection">連線中…</div>
+  </main>
+  <script type="module" src="/stage.js"></script>
+</body>
+</html>

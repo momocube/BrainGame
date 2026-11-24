@@ -1,0 +1,56 @@
+{
+  "venue": "704",
+  "source": "TouchService 704 CAD canvas rotated clockwise 90 degrees, cropped to 3328x2688 CAD view; eight-player plan rotated 180 degrees to keep the entrance clear",
+  "canvas": { "width": 3328, "height": 2688 },
+  "reservedRects": [
+    {
+      "id": "entrance-clearance",
+      "name": "Entrance / exit clearance",
+      "rect": { "x": 896, "y": 2048, "width": 512, "height": 640 }
+    }
+  ],
+  "players": [
+    {
+      "id": "P1", "name": "對面長牆玩家 A", "rotationDegrees": 0,
+      "rect": { "x": 704, "y": 0, "width": 640, "height": 640 },
+      "sources": [{ "face": 0, "x": 704, "y": 0, "width": 640, "height": 640 }]
+    },
+    {
+      "id": "P2", "name": "對面長牆玩家 B", "rotationDegrees": 0,
+      "rect": { "x": 1344, "y": 0, "width": 640, "height": 640 },
+      "sources": [{ "face": 0, "x": 1344, "y": 0, "width": 640, "height": 640 }]
+    },
+    {
+      "id": "P3", "name": "對面長牆玩家 C", "rotationDegrees": 0,
+      "rect": { "x": 1984, "y": 0, "width": 640, "height": 640 },
+      "sources": [{ "face": 0, "x": 1984, "y": 0, "width": 640, "height": 640 }]
+    },
+    {
+      "id": "P4", "name": "左側玩家 A", "rotationDegrees": 270,
+      "rect": { "x": 0, "y": 704, "width": 640, "height": 640 },
+      "sources": [{ "face": 1, "x": 0, "y": 704, "width": 640, "height": 640 }]
+    },
+    {
+      "id": "P5", "name": "左側玩家 B", "rotationDegrees": 270,
+      "rect": { "x": 0, "y": 1344, "width": 640, "height": 640 },
+      "sources": [{ "face": 1, "x": 0, "y": 1344, "width": 640, "height": 640 }]
+    },
+    {
+      "id": "P6", "name": "右側玩家 A", "rotationDegrees": 90,
+      "rect": { "x": 2688, "y": 704, "width": 640, "height": 640 },
+      "sources": [{ "face": 3, "x": 2688, "y": 704, "width": 640, "height": 640 }]
+    },
+    {
+      "id": "P7", "name": "右側玩家 B", "rotationDegrees": 90,
+      "rect": { "x": 2688, "y": 1344, "width": 640, "height": 640 },
+      "sources": [{ "face": 3, "x": 2688, "y": 1344, "width": 640, "height": 640 }]
+    },
+    {
+      "id": "P8", "name": "入口側外側玩家", "rotationDegrees": 180,
+      "rect": { "x": 2048, "y": 2048, "width": 640, "height": 640 },
+      "sources": [{ "face": 4, "x": 2048, "y": 2048, "width": 640, "height": 640 }]
+    }
+  ],
+  "ignoredFaces": [2],
+  "decorativeFaces": [5, 6]
+}

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101623">
+  <title>704 腦力競賽｜工作人員控制台</title>
+  <link rel="stylesheet" href="/staff.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">704 BRAIN GAME</div>
+      <h1>工作人員控制台</h1>
+    </div>
+    <div class="header-actions">
+      <span id="touch-status" class="status-pill offline">TouchService 連線中</span>
+      <span id="stage-status" class="status-pill offline">遊戲畫面未連線</span>
+      <button id="open-stage" class="button secondary">開啟遊戲畫面</button>
+      <button id="touch-diagnostics-open" class="button secondary">觸控校正</button>
+      <button id="screen-settings" class="button secondary" hidden>螢幕設定</button>
+    </div>
+  </header>
+
+  <main class="dashboard">
+    <div id="display-warning" class="display-warning" role="status" hidden></div>
+    <section class="card session-card">
+      <div class="card-heading"><div><div class="eyebrow">SESSION</div><h2>場次控制</h2></div><span id="phase-pill" class="phase-pill">待機</span></div>
+      <div class="session-metrics">
+        <div><span>剩餘場次時間</span><strong id="session-time">45:00</strong></div>
+        <div><span>目前遊戲</span><strong id="current-game">尚未開始</strong></div>
+        <div><span>輪次</span><strong id="round-count">—</strong></div>
+        <div><span>參賽區</span><strong id="participant-count">0</strong></div>
+      </div>
+      <div class="progress-track"><div id="session-progress"></div></div>
+      <div class="button-row primary-actions">
+        <button id="start-session" class="button primary">開始 45 分鐘場次</button>
+        <button id="pause-session" class="button warning">暫停</button>
+        <button id="resume-session" class="button primary">繼續場次</button>
+        <button id="end-session" class="button danger">立即結束場次</button>
+      </div>
+      <p id="start-session-help" class="muted" role="status">等待 TouchService 就緒後才能開始場次。</p>
+      <div id="notice" class="notice">等待場次開始。</div>
+      <div id="error" class="error" role="alert" hidden></div>
+    </section>
+
+    <section class="card game-card">
+      <div class="card-heading"><div><div class="eyebrow">GAME FLOW</div><h2>遊戲流程介入</h2></div><span id="game-flow-label" class="muted">請先開始場次</span></div>
+      <div class="button-row">
+        <button id="start-tutorial" class="button primary">代玩家開始教學</button>
+        <button id="return-lobby" class="button secondary">教學返回大廳</button>
+        <button id="restart-round" class="button secondary">重開本輪</button>
+        <button id="cancel-round" class="button secondary">作廢本輪並回大廳</button>
+      </div>
+      <h3 class="subheading">大廳選擇遊戲</h3>
+      <div id="game-list" class="game-list"></div>
+    </section>
+
+    <section class="card roster-card">
+      <div class="card-heading"><div><div class="eyebrow">PLAYER ZONES</div><h2>參賽區與成績</h2></div><span id="roster-help" class="muted">玩家可在大廳於空區長按加入</span></div>
+      <div id="zone-list" class="zone-list"></div>
+    </section>
+
+    <section class="card results-card">
+      <div class="card-heading"><div><div class="eyebrow">ROUND HISTORY</div><h2>最近結算</h2></div><span class="muted">分數即時累計到本場</span></div>
+      <div id="results-list" class="results-list"><div class="empty">尚無已結算輪次</div></div>
+    </section>
+
+    <section class="card archive-card">
+      <div class="card-heading"><div><div class="eyebrow">SESSION ARCHIVE</div><h2>場次紀錄與匯出</h2></div><span class="muted">每場自動保存</span></div>
+      <div class="archive-controls">
+        <label class="archive-label" for="session-archive">選擇場次</label>
+        <select id="session-archive" aria-label="選擇要匯出的場次"></select>
+        <button id="export-session" class="button primary" disabled>下載 CSV</button>
+        <button id="export-session-json" class="button secondary" disabled>下載完整 JSON</button>
+        <button id="refresh-sessions" class="button secondary">重新整理</button>
+      </div>
+      <div id="archive-status" class="muted archive-status" role="status">場次結果會保存於本機。</div>
+    </section>
+
+    <section class="card rules-card">
+      <div class="card-heading">
+        <div><div class="eyebrow">GAME RULES</div><h2>遊戲設定</h2></div>
+        <span id="rules-status" class="muted" role="status">載入規則中…</span>
+      </div>
+      <p class="rules-help">可設定遊戲啟用、輪數、時間、懲罰與難度。修改只會套用到下一場；場次進行中不能改動本場規則。</p>
+      <div id="rules-list" class="rules-list"></div>
+      <div class="rules-actions">
+        <button id="save-rules" class="button primary" disabled>儲存遊戲設定</button>
+        <button id="reload-rules" class="button secondary">重新載入</button>
+      </div>
+    </section>
+  </main>
+  <dialog id="touch-diagnostics" class="touch-diagnostics-dialog" aria-labelledby="touch-diagnostics-title">
+    <div class="touch-diagnostics-shell">
+      <header class="touch-diagnostics-header">
+        <div><div class="eyebrow">TOUCH SERVICE</div><h2 id="touch-diagnostics-title">觸點與 CAVE 區域校正</h2></div>
+        <div class="touch-diagnostics-actions">
+          <span id="diagnostics-status" class="status-pill offline">尚未連線</span>
+          <button id="touch-diagnostics-close" class="button secondary">關閉</button>
+        </div>
+      </header>
+      <p class="touch-diagnostics-help">請依序觸碰各玩家區四角與中央，確認觸點落在正確區域，並檢查 local U/V 方向。紅色入口保留區不應收到玩家輸入。觸點診斷僅暫存於記憶體，不會寫入場次紀錄。</p>
+      <div class="touch-diagnostics-content">
+        <div class="touch-map-wrap"><canvas id="touch-map" aria-label="704 CAVE 玩家區與即時觸點圖"></canvas></div>
+        <aside class="touch-event-panel">
+          <strong>最近觸點</strong>
+          <div id="touch-event-list" class="touch-event-list"><div class="empty">等待 TouchService frame…</div></div>
+        </aside>
+      </div>
+    </div>
+  </dialog>
+  <script type="module" src="/staff.js"></script>
+</body>
+</html>

@@ -1,0 +1,450 @@
+{
+  "rulesVersion": "1.0.10",
+  "status": "prototype_in_progress",
+  "updatedAt": "2026-11-24",
+  "common": {
+    "sessionDurationSeconds": 2700,
+    "countdownSeconds": 3,
+    "roundResultsSeconds": 5,
+    "resumeCountdownSeconds": 3,
+    "readyHoldSeconds": 1,
+    "joinAllowedState": "lobby",
+    "maxAnswerZones": 8,
+    "minimumParticipantsToPlay": 1,
+    "tutorialTimeoutSeconds": null,
+    "sessionClockIncludesLobbyTutorialAndResults": true,
+    "freezeAllClocksWhilePausedAndResuming": true,
+    "hideQuestionWhilePaused": true,
+    "sessionExpiryDuringRound": "finish_current_round_and_results",
+    "sessionExpiryBeforeRound": "final_results",
+    "sessionExpiryDuringRoundResults": "finish_results_then_final",
+    "participantRoster": "freeze_for_game_set",
+    "timedHintsEnabled": false,
+    "floorInputEnabled": false,
+    "inputTrigger": "down_once_then_release",
+    "sameZoneMultiControlBatch": "reject_without_penalty",
+    "deadlineComparison": "received_active_time_strictly_less_than_deadline",
+    "timingPrecisionMilliseconds": 1,
+    "earlyFinishEvaluation": "after_processing_entire_input_batch",
+    "scoring": {
+      "formula": "participant_count_minus_rank",
+      "ties": "average_occupied_rank_points",
+      "storageUnitsPerPoint": 2,
+      "normalizeAcrossGameTypes": false,
+      "gameSetBonusPoints": 0,
+      "unrankedIncompletePoints": 0,
+      "sessionScoreTies": "shared_rank"
+    },
+    "layout": {
+      "localDesignWidth": 640,
+      "localDesignHeight": 640,
+      "interactiveRowsOneBased": [
+        1,
+        8
+      ],
+      "statusRowsOneBased": [
+        9,
+        10
+      ],
+      "physicalRowNumbering": "bottom_to_top",
+      "localCoordinateOrigin": "top_left_y_down",
+      "interactiveRect": {
+        "x": 0,
+        "y": 128,
+        "width": 640,
+        "height": 512
+      },
+      "statusRect": {
+        "x": 0,
+        "y": 0,
+        "width": 640,
+        "height": 128
+      },
+      "numericKeypadColumns": 4,
+      "numericKeypadRows": 4,
+      "numericKeypadKeys": [
+        "1",
+        "2",
+        "3",
+        "backspace",
+        "4",
+        "5",
+        "6",
+        "clear",
+        "7",
+        "8",
+        "9",
+        "spacer",
+        "spacer",
+        "0",
+        "spacer",
+        "confirm"
+      ],
+      "orientation": "per_zone_player_facing_view",
+      "geometrySource": "TouchService_704_profile"
+    }
+  },
+  "games": {
+    "minesweeper": {
+      "displayName": "踩地雷",
+      "rounds": 5,
+      "boardColumns": 10,
+      "boardRows": 8,
+      "playSeconds": 120,
+      "minesByRound": [
+        8,
+        10,
+        12,
+        14,
+        16
+      ],
+      "mandatoryStartCellOneBased": {
+        "column": 5,
+        "row": 4
+      },
+      "boardRowNumbering": "top_to_bottom",
+      "startSafeRadiusCells": 1,
+      "sameBoardForAllPlayers": true,
+      "penaltySecondsPerDistinctMine": 15,
+      "wrongAnswerLockSeconds": 0,
+      "zeroFloodReveal": true,
+      "flagBlocksReveal": true,
+      "maxFlags": "mine_count",
+      "chordRevealEnabled": false,
+      "completion": "all_safe_cells_revealed",
+      "endCondition": "all_finished_or_deadline",
+      "ranking": "finished_adjusted_time_then_incomplete_safe_reveal_count",
+      "zeroProgressPoints": 0,
+      "boardRect": {
+        "x": 0,
+        "y": 128,
+        "width": 640,
+        "height": 448
+      },
+      "toolbarRect": {
+        "x": 0,
+        "y": 576,
+        "width": 640,
+        "height": 64
+      }
+    },
+    "zero_sum_grid": {
+      "displayName": "數字方格",
+      "rounds": 10,
+      "boardColumns": 10,
+      "boardRows": 8,
+      "playSeconds": 60,
+      "wrongAnswerLockSeconds": 15,
+      "clearInputOnWrongAnswer": true,
+      "numericInputMinimum": 0,
+      "numericInputMaximum": 63,
+      "targetSum": 0,
+      "subgridColumns": 2,
+      "subgridRows": 2,
+      "overlappingSubgridsCount": true,
+      "endCondition": "n_minus_one_correct_or_deadline_single_player_requires_completion",
+      "ranking": "correct_completion_time",
+      "incompletePoints": 0,
+      "difficultyBands": [
+        {
+          "firstRound": 1,
+          "lastRound": 3,
+          "valueMin": -3,
+          "valueMax": 3,
+          "answerMin": 3,
+          "answerMax": 10
+        },
+        {
+          "firstRound": 4,
+          "lastRound": 7,
+          "valueMin": -5,
+          "valueMax": 5,
+          "answerMin": 2,
+          "answerMax": 8
+        },
+        {
+          "firstRound": 8,
+          "lastRound": 10,
+          "valueMin": -9,
+          "valueMax": 9,
+          "answerMin": 1,
+          "answerMax": 6
+        }
+      ]
+    },
+    "cube_count": {
+      "displayName": "3D 數方塊",
+      "rounds": 10,
+      "playSeconds": 60,
+      "wrongAnswerLockSeconds": 15,
+      "clearInputOnWrongAnswer": true,
+      "numericInputMinimum": 1,
+      "numericInputMaximum": 150,
+      "solidColumnsOnly": true,
+      "playerControlledCamera": false,
+      "fixedViewsVisibleFromStart": true,
+      "cameraAzimuthDegrees": [
+        45,
+        165,
+        285
+      ],
+      "cameraElevationDegrees": 35,
+      "endCondition": "n_minus_one_correct_or_deadline_single_player_requires_completion",
+      "ranking": "correct_completion_time",
+      "incompletePoints": 0,
+      "difficultyBands": [
+        {
+          "firstRound": 1,
+          "lastRound": 3,
+          "baseColumns": 3,
+          "baseRows": 3,
+          "heightMin": 0,
+          "heightMax": 3
+        },
+        {
+          "firstRound": 4,
+          "lastRound": 7,
+          "baseColumns": 4,
+          "baseRows": 4,
+          "heightMin": 0,
+          "heightMax": 4
+        },
+        {
+          "firstRound": 8,
+          "lastRound": 10,
+          "baseColumns": 5,
+          "baseRows": 5,
+          "heightMin": 0,
+          "heightMax": 6
+        }
+      ]
+    },
+    "solid_puzzle": {
+      "displayName": "立體拼圖",
+      "rounds": 20,
+      "playSeconds": 30,
+      "optionCount": 6,
+      "choiceGridRect": {
+        "x": 0,
+        "y": 128,
+        "width": 640,
+        "height": 448
+      },
+      "confirmRect": {
+        "x": 0,
+        "y": 576,
+        "width": 640,
+        "height": 64
+      },
+      "confirmationRequired": true,
+      "wrongAnswerLockSeconds": 10,
+      "removeWrongOptions": false,
+      "clearSelectionOnWrongAnswer": true,
+      "allOptionsSameCubeCount": true,
+      "allowRigidRotation": true,
+      "allowReflection": false,
+      "validateInsertionMotionPath": false,
+      "optionOrder": "seeded_per_player_fixed_for_round",
+      "endCondition": "n_minus_one_correct_or_deadline_single_player_requires_completion",
+      "ranking": "correct_completion_time",
+      "incompletePoints": 0,
+      "difficultyBands": [
+        {
+          "firstRound": 1,
+          "lastRound": 6,
+          "targetDimensions": [
+            3,
+            3,
+            2
+          ],
+          "missingCubesMin": 4,
+          "missingCubesMax": 4
+        },
+        {
+          "firstRound": 7,
+          "lastRound": 14,
+          "targetDimensions": [
+            3,
+            3,
+            3
+          ],
+          "missingCubesMin": 4,
+          "missingCubesMax": 5
+        },
+        {
+          "firstRound": 15,
+          "lastRound": 20,
+          "targetDimensions": [
+            4,
+            3,
+            3
+          ],
+          "missingCubesMin": 5,
+          "missingCubesMax": 6
+        }
+      ]
+    },
+    "memory_poker": {
+      "displayName": "記憶撲克",
+      "rounds": 5,
+      "deckSize": 52,
+      "jokers": 0,
+      "memoryCards": 16,
+      "memoryGridColumns": 4,
+      "memoryGridRows": 4,
+      "memorySeconds": 20,
+      "selectionSeconds": 10,
+      "revealCountdownSeconds": 3,
+      "communityCards": 3,
+      "communityCardsVisibleDuringMemory": false,
+      "selectedCardsRequired": 2,
+      "uniqueCardsAcrossMemoryAndCommunity": true,
+      "cardGridRect": {
+        "x": 0,
+        "y": 128,
+        "width": 640,
+        "height": 384
+      },
+      "selectionInfoRect": {
+        "x": 0,
+        "y": 512,
+        "width": 640,
+        "height": 64
+      },
+      "confirmRect": {
+        "x": 0,
+        "y": 576,
+        "width": 640,
+        "height": 64
+      },
+      "sameCardMayBeSelectedByDifferentPlayers": true,
+      "samePositionTwiceForOnePlayer": false,
+      "confirmationLocksSelection": true,
+      "autoSubmitCompleteSelectionAtDeadline": true,
+      "replaceSelectionOnThirdCardTap": false,
+      "selectedCardsRemainHiddenUntilResults": true,
+      "incompletePoints": 0,
+      "endCondition": "fixed_phase_schedule",
+      "ranking": "standard_five_card_high_hand_with_kickers",
+      "suitsBreakTies": false,
+      "selectionSpeedBreaksTies": false,
+      "aceLowStraightAllowed": true,
+      "wrapAroundStraightAllowed": false
+    },
+    "map_view": {
+      "displayName": "2D／3D 地圖定位",
+      "rounds": 20,
+      "playSeconds": 30,
+      "optionCount": 6,
+      "mapPanelRect": {
+        "x": 0,
+        "y": 128,
+        "width": 640,
+        "height": 256
+      },
+      "choiceGridRect": {
+        "x": 0,
+        "y": 384,
+        "width": 640,
+        "height": 192
+      },
+      "choiceGridColumns": 3,
+      "choiceGridRows": 2,
+      "confirmRect": {
+        "x": 0,
+        "y": 576,
+        "width": 640,
+        "height": 64
+      },
+      "confirmationRequired": true,
+      "wrongAnswerLockSeconds": 10,
+      "clearSelectionOnWrongAnswer": true,
+      "removeWrongOptions": false,
+      "answerIncludesPositionAndHeading": true,
+      "headings": [
+        "north",
+        "east",
+        "south",
+        "west"
+      ],
+      "playerControlledCamera": false,
+      "minimumDistinctVisibleClues": 2,
+      "sameLabelsForAllPlayers": true,
+      "endCondition": "n_minus_one_correct_or_deadline_single_player_requires_completion",
+      "ranking": "correct_completion_time",
+      "incompletePoints": 0,
+      "difficultyBands": [
+        {
+          "firstRound": 1,
+          "lastRound": 6,
+          "mapColumns": 7,
+          "mapRows": 7,
+          "landmarkTypes": 3
+        },
+        {
+          "firstRound": 7,
+          "lastRound": 14,
+          "mapColumns": 9,
+          "mapRows": 9,
+          "landmarkTypes": 4
+        },
+        {
+          "firstRound": 15,
+          "lastRound": 20,
+          "mapColumns": 11,
+          "mapRows": 11,
+          "landmarkTypes": 5
+        }
+      ]
+    },
+    "memory_sequence": {
+      "displayName": "數字速記",
+      "rounds": 10,
+      "boardColumns": 10,
+      "boardRows": 8,
+      "numberCountByRound": [
+        4,
+        4,
+        5,
+        5,
+        6,
+        6,
+        7,
+        7,
+        8,
+        8
+      ],
+      "memorySecondsByRound": [
+        6,
+        6,
+        5,
+        5,
+        4,
+        4,
+        3,
+        3,
+        2,
+        2
+      ],
+      "answerSeconds": 18,
+      "heartsPerRound": 3,
+      "heartDisplayRowsOneBased": [
+        9,
+        10
+      ],
+      "wrongAnswerLockSeconds": 0,
+      "wrongAnswerPenaltySeconds": 0,
+      "resetToFirstNumberOnError": true,
+      "reshuffleOnError": false,
+      "revealMemoryAgainOnError": false,
+      "reconcealCompletedCellsOnError": true,
+      "emptyOrPreviouslyCompletedCellCountsAsError": true,
+      "retainBestPrefixOnError": true,
+      "variantStrategy": "identity_horizontal_vertical_both_mirrors",
+      "endCondition": "all_finished_or_eliminated_or_deadline",
+      "ranking": "finished_time_then_best_prefix_desc_then_first_reached_time",
+      "remainingHeartsBreakTies": false,
+      "zeroProgressPoints": 0
+    }
+  }
+}

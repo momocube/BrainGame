@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.pdf binary
+*.exe binary
+*.zip binary
+*.nupkg binary
+*.asar binary

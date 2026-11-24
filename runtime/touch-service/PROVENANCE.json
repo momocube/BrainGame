@@ -1,0 +1,15 @@
+﻿{
+    "component":  "TouchService",
+    "sourceRevision":  "3d0b503bd58ac14c58419d1cf355cd693bca5705",
+    "runtime":  "win-x64 self-contained single-file",
+    "dotnetSdk":  "8.0.301",
+    "builtAt":  "2026-11-18T13:41:49Z",
+    "sha256":  "7bb12617564784eae0bbe6cac9456d10424155b7747325124a2ac1e656c1029d",
+    "publishArguments":  [
+                             "-c Release",
+                             "-r win-x64",
+                             "-p:SelfContained=true",
+                             "-p:PublishSingleFile=true",
+                             "-p:EnableCompressionInSingleFile=true"
+                         ]
+}

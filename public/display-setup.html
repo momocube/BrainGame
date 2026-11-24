@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>704 腦力競賽｜螢幕設定</title>
+  <style>
+    :root{font-family:"Microsoft JhengHei","Noto Sans TC",sans-serif;color:#edf4ff;background:#0b1220;font-synthesis:none}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 12% -15%,#243b5c,transparent 48%),#0b1220}.wrap{max-width:1000px;margin:0 auto;padding:32px 28px 40px}h1{font-size:28px;margin:5px 0 10px}.eyebrow{font-size:11px;letter-spacing:.15em;color:#8ea7c7;font-weight:800}.intro{color:#bbc9dc;line-height:1.6;margin:0 0 22px}.warning{padding:13px 15px;border:1px solid #795b24;background:#392d17;color:#ffe0a0;border-radius:9px;line-height:1.55;margin-bottom:20px}.warning[hidden]{display:none}.card{padding:20px;margin:14px 0;background:#141f31;border:1px solid #2e3d54;border-radius:12px}.card h2{font-size:17px;margin:0 0 13px}.screens{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}.screen{padding:14px;border:1px solid #34445e;border-radius:9px;background:#101a29}.screen strong{display:block;font-size:14px}.screen small{display:block;color:#aebdd1;line-height:1.6;margin:7px 0 10px}.button{border:1px solid #4c6688;border-radius:7px;padding:9px 12px;color:#eef5ff;background:#263b56;font-weight:700;cursor:pointer}.button:hover{filter:brightness(1.15)}.button.primary{background:#2769a6;border-color:#3884c8}.fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}.field label{display:block;color:#b8c7da;font-size:12px;margin-bottom:6px}.field select{width:100%;padding:11px;color:#f4f8ff;background:#0d1726;border:1px solid #40536e;border-radius:7px}.actions{display:flex;gap:10px;align-items:center;margin-top:16px}.error{color:#ffaaaa;margin-top:12px;min-height:20px}.hint{color:#92a5be;font-size:12px;line-height:1.55;margin-top:13px}.footer{color:#8ea0b8;font-size:11px;margin-top:20px}@media(max-width:640px){.wrap{padding:20px 14px}.fields{grid-template-columns:1fr}.actions{align-items:stretch;flex-direction:column}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="eyebrow">704 BRAIN GAME · DISPLAY SETUP</div>
+    <h1>指定控制台與遊戲螢幕</h1>
+    <p class="intro">首次啟動會自動把主要螢幕用作控制台，並把第一台非主要螢幕用作遊戲輸出；遊戲以 2688×3840 TouchService 畫布全螢幕投播。若要改用其他螢幕，可在此辨認並重新指定。程式會記住螢幕識別碼、位置、尺寸、縮放與方向；其中任一項改變時會要求重新確認。</p>
+    <div id="warning" class="warning" hidden></div>
+    <section class="card">
+      <h2>已偵測到的螢幕</h2>
+      <div id="screens" class="screens"></div>
+    </section>
+    <section class="card">
+      <h2>視窗分配</h2>
+      <div class="fields">
+        <div class="field"><label for="staff-display">第一螢幕・工作人員控制台</label><select id="staff-display"></select></div>
+        <div class="field"><label for="game-display">第二螢幕・遊戲輸出</label><select id="game-display"></select></div>
+      </div>
+      <div class="actions">
+        <button id="save" class="button primary">儲存並開啟遊戲</button>
+        <button id="preview" class="button" hidden>使用單螢幕開發預覽</button>
+      </div>
+      <div id="error" class="error" role="alert"></div>
+      <div class="hint">正式場域需使用兩台不同的實體螢幕。遊戲畫面會在第二螢幕全螢幕顯示，內容畫布為 2688×3840；螢幕本身的實際輸出解析度需在 Windows 顯示設定中設為 2688×3840。解析度或旋轉改變後，場次會先暫停再要求重新確認。</div>
+    </section>
+    <div class="footer">此設定只保存本機桌面程式的顯示器對應，不會修改 TouchService 的場域或校正設定。</div>
+  </main>
+  <script type="module" src="./display-setup.js"></script>
+</body>
+</html>
