@@ -13,7 +13,7 @@ const tutorials = {
   zero_sum_grid: (config) => ({
     goal: "找出總和為 0 的所有相鄰 2×2 方格；重疊的方格也要分別計數。",
     steps: [
-      "觀察地板上的 10×8 數字盤，檢查每個相鄰 2×2 區塊。",
+      `觀察地板上的 ${number(config, "boardColumns", 5)}×${number(config, "boardRows", 5)} 數字盤，檢查每個相鄰 2×2 區塊。`,
       "在答題區輸入符合條件的區塊總數，再按確認。",
       `答案錯誤會清空輸入並鎖答 ${number(config, "wrongAnswerLockSeconds", 15)} 秒；錯誤期間倒數照常。`
     ],

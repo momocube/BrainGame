@@ -21,6 +21,7 @@ test("each configured game has player-facing instructions and timing based on it
 
 test("numeric and choice-game tutorials reflect editable penalties and round lengths", () => {
   const zero = getGameTutorial("zero_sum_grid", { ...rules.games.zero_sum_grid, wrongAnswerLockSeconds: 21, playSeconds: 75 });
+  assert.match(zero.steps[0], /5×5/);
   assert.match(zero.steps[2], /21 秒/);
   assert.match(zero.schedule, /75 秒/);
 

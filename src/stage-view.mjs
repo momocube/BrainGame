@@ -74,7 +74,7 @@ export function createStageSnapshot(engine, rules, zones) {
       ? { ...question }
       : { cols: question.cols, rows: question.rows, anchor: question.anchor, mineCount: question.mines.length };
   } else if (gameId === 'zero_sum_grid') {
-    publicQuestion = { cells: [...question.cells], cols: 10, rows: 8 };
+    publicQuestion = { cells: [...question.cells], cols: question.cols, rows: question.rows };
   } else if (gameId === 'cube_count') {
     publicQuestion = { size: question.size, maxHeight: question.maxHeight, heights: [...question.heights] };
   } else if (gameId === 'solid_puzzle') {

@@ -607,15 +607,21 @@ function renderMineSolution(q = {}) {
   wrap.append(board); return wrap;
 }
 function renderZeroGrid(q = {}, answer = null) {
+  const cols = q.cols ?? 5, rows = q.rows ?? 5;
   const wrap = el('div', 'floor-stack zero-grid');
+  wrap.style.setProperty('--zero-cols', cols);
+  wrap.style.setProperty('--zero-ratio', cols / rows);
   wrap.append(el('div', 'floor-title', answer ? `答案：${answer.count} 個` : '數字方格'), el('div', 'floor-subtitle', '計算所有總和為 0 的 2×2 方格（可重疊）'));
   const solved = new Set();
-  for (const [x, y] of answer?.blocks ?? []) for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) solved.add((y + dy) * 10 + x + dx);
+  for (const [x, y] of answer?.blocks ?? []) for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) solved.add((y + dy) * cols + x + dx);
+  const area = el('div', 'zero-board-area');
   const board = el('div', 'floor-board');
-  for (const [index, value] of (q.cells ?? Array(80).fill('')).entries()) {
+  board.style.gridTemplateColumns = `repeat(${cols},minmax(0,1fr))`;
+  board.style.gridTemplateRows = `repeat(${rows},minmax(0,1fr))`;
+  for (const [index, value] of (q.cells ?? Array(cols * rows).fill('')).entries()) {
     const cell = el('div', `floor-number${Number(value) < 0 ? ' negative' : ''}${solved.has(index) ? ' solution' : ''}`, String(value)); board.append(cell);
   }
-  wrap.append(board); return wrap;
+  area.append(board); wrap.append(area); return wrap;
 }
 function renderCubeViews(q = {}, answer = null, config = {}) {
   const wrap = el('div', 'floor-stack');

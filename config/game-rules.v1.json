@@ -1,5 +1,5 @@
 {
-  "rulesVersion": "1.0.13",
+  "rulesVersion": "1.0.14",
   "status": "prototype_in_progress",
   "updatedAt": "2026-11-25",
   "common": {
@@ -149,13 +149,13 @@
     "zero_sum_grid": {
       "displayName": "數字方格",
       "rounds": 10,
-      "boardColumns": 10,
-      "boardRows": 8,
+      "boardColumns": 5,
+      "boardRows": 5,
       "playSeconds": 60,
       "wrongAnswerLockSeconds": 15,
       "clearInputOnWrongAnswer": true,
       "numericInputMinimum": 0,
-      "numericInputMaximum": 63,
+      "numericInputMaximum": 16,
       "targetSum": 0,
       "subgridColumns": 2,
       "subgridRows": 2,

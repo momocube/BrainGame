@@ -299,3 +299,9 @@
 .sequence-result-review,.sequence-result-review .sequence-board-wrap,.sequence-result-review .sequence-grid,.sequence-result-review .answer-cell{background:#553d43}
 .sequence-result-header .zone-head{font-size:30px;font-weight:900;color:#ffe8e3}
 .sequence-result-header .zone-detail{font-size:18px;color:#ead9d8}
+
+/* Fit the question and result boards to their available space without stretching cells. */
+.zero-grid>.floor-title,.zero-grid>.floor-subtitle{flex:none}
+.zero-board-area{flex:1;min-height:0;width:100%;display:grid;place-items:center;container-type:size}
+.zero-grid .zero-board-area>.floor-board{width:min(100cqw,calc(100cqh * var(--zero-ratio)));height:auto;aspect-ratio:var(--zero-ratio);max-width:100%;max-height:100%}
+.zero-grid .floor-number,#floor>.zero-grid .floor-number{min-width:0;min-height:0;font-size:min(3.6em,calc(100cqmin / (var(--zero-cols) * 2.1)));line-height:1}

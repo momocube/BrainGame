@@ -209,7 +209,7 @@ test('solid puzzle uses a seeded per-player option order for both display and to
 test('difficulty boundaries generate valid questions for every round band', () => {
   const samples = {
     minesweeper: [1, 2, 3, 4, 5],
-    zero_sum_grid: [1, 4, 8],
+    zero_sum_grid: Array.from({ length: 10 }, (_, index) => index + 1),
     cube_count: [1, 4, 8],
     solid_puzzle: [1, 7, 15],
     memory_poker: [1, 3, 5],
@@ -228,6 +228,12 @@ test('difficulty boundaries generate valid questions for every round band', () =
         assert.equal(question.numbers[question.anchor], 0);
         assert.equal(question.cols * question.rows, 48);
       } else if (gameId === 'zero_sum_grid') {
+        assert.equal(question.cols, 5);
+        assert.equal(question.rows, 5);
+        assert.equal(question.cells.length, 25);
+        const publicQuestion = createStageSnapshot(engine, rules, zones).currentRound.question;
+        assert.equal(publicQuestion.cols, 5);
+        assert.equal(publicQuestion.rows, 5);
         assert.ok(question.answers.length >= rules.games.zero_sum_grid.difficultyBands.find((band) => round >= band.firstRound && round <= band.lastRound).answerMin);
         assert.ok(question.answers.length <= rules.games.zero_sum_grid.difficultyBands.find((band) => round >= band.firstRound && round <= band.lastRound).answerMax);
         for (const [x, y] of question.answers) {
