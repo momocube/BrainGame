@@ -381,10 +381,19 @@ function renderSequenceZone(body, sequence = {}, round, forceReveal = false, fla
 
 function renderZoneResult(header, body, panel, data) {
   const resultRow = data.results?.[0]?.rows?.find((result) => result.zoneId === panel.zoneId);
-  header.append(el('div', 'zone-head', `${data.results?.[0]?.gameName ?? '本輪結算'}・${resultRow?.rank ? `第 ${resultRow.rank} 名` : '未完成'}　+${resultRow?.score ?? 0} 分`));
   if (data.currentRound?.gameId === 'memory_sequence' && panel.sequence) {
+    const wrongCount = panel.sequence.wrongCount ?? 0;
+    const review = !resultRow?.completed || wrongCount > 0;
+    body.classList.add(review ? 'sequence-result-review' : 'sequence-result-clean');
+    header.classList.add('sequence-result-header');
+    header.append(el('div', 'zone-head', `公布答案・第 ${data.currentRound.round} 輪`));
+    const status = resultRow?.completed ? '已完成' : '未完成';
+    header.append(el('div', 'zone-detail', `${status}${wrongCount ? `・答錯 ${wrongCount} 次` : ''}・${resultRow?.rank ? `第 ${resultRow.rank} 名` : '未排名'}　+${resultRow?.score ?? 0} 分`));
     renderSequenceZone(body, panel.sequence, data.currentRound, true);
-  } else if (panel.hand) {
+    return;
+  }
+  header.append(el('div', 'zone-head', `${data.results?.[0]?.gameName ?? '本輪結算'}・${resultRow?.rank ? `第 ${resultRow.rank} 名` : '未完成'}　+${resultRow?.score ?? 0} 分`));
+  if (panel.hand) {
     body.classList.add('zone-body-centered');
     body.append(el('div', 'floor-title', panel.hand.name), el('div', 'compact-info', panel.hand.labels?.join('　') ?? ''));
   } else if (data.currentRound?.gameId === 'minesweeper') {

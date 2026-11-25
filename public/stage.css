@@ -294,3 +294,8 @@
 .mine-board.mode-reveal{background:#73c6ff;border-color:#73c6ff}
 .mine-board.mode-flag{background:#ffce3a;border-color:#ffce3a}
 .mine-board.mode-flag .answer-cell:not(.open):not(.flag){background:#4b3b16}
+
+/* Answer review stays visibly distinct until the next round replaces the board. */
+.sequence-result-review,.sequence-result-review .sequence-board-wrap,.sequence-result-review .sequence-grid,.sequence-result-review .answer-cell{background:#553d43}
+.sequence-result-header .zone-head{font-size:30px;font-weight:900;color:#ffe8e3}
+.sequence-result-header .zone-detail{font-size:18px;color:#ead9d8}
