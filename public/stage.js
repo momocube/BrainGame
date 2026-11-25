@@ -4,6 +4,7 @@ import { EXIT_BUTTONS, canPlayerExit } from './exit-control.mjs';
 import { TUTORIAL_BUTTON_DIAMETER } from './tutorial-control.mjs';
 
 import { renderPerspectiveSceneSvg } from './map-scene.mjs';
+import { slitherlinkBoardSvg } from './slitherlink-board.mjs';
 import { getGameTutorial } from './tutorial-content.mjs';
 import { compareStageStateFreshness, scoreboardColumnCount, stageStructureKey } from './stage-rendering.mjs';
 
@@ -14,7 +15,8 @@ const venue = $('#venue');
 const projectionCanvas = $('#projection-canvas');
 const gameNames = {
   minesweeper: '踩地雷', zero_sum_grid: '數字方格', cube_count: '3D 數方塊',
-  solid_puzzle: '立體拼圖', memory_poker: '記憶撲克', map_view: '地圖定位', memory_sequence: '數字速記'
+  solid_puzzle: '立體拼圖', memory_poker: '記憶撲克', map_view: '地圖定位', memory_sequence: '數字速記',
+  slitherlink: '數迴'
 };
 let state;
 let lastRenderedStructureKey = null;
@@ -65,11 +67,20 @@ function setTextIfChanged(node, value) {
   if (node && node.textContent !== value) node.textContent = value;
 }
 
-function renderSharedMenuZone(zone, option, index, total, data) {
-  if (!option) return null;
+function sharedMenuTile(option, data, split) {
+  const tile = el('div', `shared-game-tile${option.id === 'random' ? ' random-game' : ''}`);
+  tile.append(el('strong', '', option.name));
+  tile.append(el('small', '', option.id === 'random' ? '全體共同抽選一款遊戲' : `全體共同遊玩・${option.rounds} 輪`));
+  tile.append(el('span', 'shared-game-prompt', data.phase === 'lobby' ? (split ? '觸碰此半邊選擇' : '觸碰此區域選擇') : '全場確認中'));
+  return tile;
+}
+
+/** One wall of the shared lobby menu; the last wall may hold several options side by side. */
+function renderSharedMenuZone(zone, options, position, total, data) {
+  if (!options?.length) return null;
   const node = el('section', 'zone shared-menu-zone');
   node.dataset.menuZoneId = zone.id;
-  node.dataset.gameId = option.id;
+  node.dataset.gameId = options.map((option) => option.id).join(' ');
   node.style.cssText = rectStyle(zone.rect);
   const inner = el('div', 'zone-inner');
   const content = el('div', 'zone-content shared-menu-content');
@@ -77,14 +88,18 @@ function renderSharedMenuZone(zone, option, index, total, data) {
   content.style.transform = `rotate(${zone.rotationDegrees}deg)`;
   const header = el('div', 'zone-header');
   header.append(el('div', 'zone-name', '704 全場共用選單'));
-  header.append(el('div', 'zone-head', `共同選項 ${index + 1} / ${total}`));
+  const range = options.length > 1 ? `${position + 1}–${position + options.length}` : String(position + 1);
+  header.append(el('div', 'zone-head', `共同選項 ${range} / ${total}`));
   const body = el('div', 'zone-body shared-menu-body');
-  const tile = el('div', `shared-game-tile${option.id === 'random' ? ' random-game' : ''}`);
-  tile.append(el('strong', '', option.name));
-  tile.append(el('small', '', option.id === 'random' ? '全體共同抽選一款遊戲' : `全體共同遊玩・${option.rounds} 輪`));
-  tile.append(el('span', 'shared-game-prompt', data.phase === 'lobby' ? '觸碰此區域選擇' : '全場確認中'));
-  body.append(tile); content.append(header, body);
-  if (data.phase === 'game_preview' && option.id === data.selectedGame) {
+  if (options.length === 1) body.append(sharedMenuTile(options[0], data, false));
+  else {
+    const split = el('div', 'shared-menu-split');
+    split.style.setProperty('--split', String(options.length));
+    for (const option of options) split.append(sharedMenuTile(option, data, true));
+    body.append(split);
+  }
+  content.append(header, body);
+  if (data.phase === 'game_preview' && options.some((option) => option.id === data.selectedGame)) {
     const mask = el('div', 'shared-preview-wall-mask');
     mask.setAttribute('aria-hidden', 'true');
     const confirm = el('div', 'shared-preview-wall-action shared-preview-wall-confirm');
@@ -169,6 +184,10 @@ function renderZone(zone, view, data) {
   } else if (round.gameId === 'memory_sequence') {
     header.append(el('div', 'zone-detail', round.elapsedMs < (q.memorySeconds ?? 0) * 1000
       ? '記憶數字位置' : `下一個：${(panel.sequence?.progress ?? 0) + 1}　最佳：${panel.sequence?.bestProgress ?? 0}`));
+  } else if (round.gameId === 'slitherlink') {
+    const edges = panel.slither?.edges ?? [];
+    header.append(el('div', 'zone-detail',
+      `線段 ${edges.filter((state) => state === 1).length}　叉 ${edges.filter((state) => state === 2).length}　點一下：線 → 叉 → 清除`));
   }
   const isDone = panel.done || panel.eliminated;
   if (isDone) {
@@ -187,8 +206,34 @@ function renderZone(zone, view, data) {
   else if (round.gameId === 'map_view') renderMapPlayer(body, q, panel.selection, gameConfig);
   else if (round.gameId === 'memory_poker') renderPokerZone(body, panel, q, round.elapsedMs, gameConfig);
   else if (round.gameId === 'memory_sequence') renderSequenceZone(body, panel.sequence, round, false, flashSequenceError);
+  else if (round.gameId === 'slitherlink') renderSlitherlinkZone(body, panel.slither, q, gameConfig);
   if (panel.error) header.append(el('div', 'zone-feedback', panel.error));
   return node;
+}
+
+/** Player wall board: the SVG uses the same 640×640 local coordinates as touch hit-testing. */
+function renderSlitherlinkZone(body, slither = {}, q = {}, config = {}, solution = null) {
+  const board = el('div', 'slither-zone-board');
+  board.innerHTML = slitherlinkBoardSvg({
+    cols: q.cols ?? config.boardColumns, rows: q.rows ?? config.boardRows,
+    clues: q.clues ?? [], edges: slither?.edges ?? [], solution,
+    rect: config.boardRect ?? { x: 80, y: 144, width: 480, height: 480 },
+    viewBox: '0 128 640 512', className: 'slither-svg', label: '數迴作答盤'
+  });
+  body.append(board);
+}
+
+function renderSlitherlinkFloor(q = {}, answer = null) {
+  const wrap = el('div', 'floor-stack');
+  wrap.append(el('div', 'floor-title', answer ? '數迴・本輪解答' : '數迴'));
+  wrap.append(el('div', 'floor-subtitle', '在牆面點與點之間畫線，連成一條不交叉、不分岔的封閉迴圈；數字＝該格四邊的線段數'));
+  const board = el('div', 'slither-floor-board');
+  board.innerHTML = slitherlinkBoardSvg({
+    cols: q.cols ?? answer?.cols, rows: q.rows ?? answer?.rows, clues: q.clues ?? answer?.clues ?? [],
+    edges: [], solution: answer?.solution ?? null, label: answer ? '數迴解答' : '數迴題目'
+  });
+  wrap.append(board);
+  return wrap;
 }
 
 function renderMineZone(body, mine = {}, q = {}) {
@@ -320,6 +365,9 @@ function renderZoneResult(header, body, panel, data) {
     body.append(el('div', 'floor-title', panel.hand.name), el('div', 'compact-info', panel.hand.labels?.join('　') ?? ''));
   } else if (data.currentRound?.gameId === 'minesweeper') {
     renderMineZone(body, panel.mine, data.currentRound.question);
+  } else if (data.currentRound?.gameId === 'slitherlink') {
+    const q = data.currentRound.question ?? {};
+    renderSlitherlinkZone(body, panel.slither, q, data.gameRules?.games?.slitherlink ?? {}, q.solution ?? null);
   } else {
     body.classList.add('zone-body-centered');
     body.append(el('div', 'compact-info', `累積 ${(panel.score ?? 0).toFixed(1)} 分`));
@@ -441,6 +489,7 @@ function renderQuestionDisplay(data, target) {
   else if (round.gameId === 'memory_poker') target.append(renderPokerFloor(round));
   else if (round.gameId === 'map_view') target.append(renderMapFirstPerson(round.question));
   else if (round.gameId === 'memory_sequence') showTitle('數字速記', `${round.question?.count ?? ''} 個數字　記憶 ${round.question?.memorySeconds ?? ''} 秒，蓋牌後依序點按`, target);
+  else if (round.gameId === 'slitherlink') target.append(renderSlitherlinkFloor(round.question));
 }
 
 function showTitle(title, subtitle, target = floor) {
@@ -764,6 +813,7 @@ function renderRoundResult(data, target = floor) {
   else if (result?.gameId === 'memory_poker') answerPanel.append(renderPokerFloor(round));
   else if (result?.gameId === 'map_view') answerPanel.append(renderMapFloor(q, result.answer));
   else if (result?.gameId === 'memory_sequence') answerPanel.append(el('div', 'floor-subtitle', '請查看牆面，揭露本區數字順序與本輪最佳進度'));
+  else if (result?.gameId === 'slitherlink') answerPanel.append(renderSlitherlinkFloor(q, result.answer));
   wrap.append(answerPanel);
   const grid = el('div', 'result-grid scoreboard');
   const rows = [...(result?.rows ?? [])].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999));
@@ -832,8 +882,17 @@ function render(data) {
   const zones = $('#zones'); zones.replaceChildren();
   if (data.phase === 'lobby' || data.phase === 'game_preview') {
     const options = [...(data.availableGames ?? []), { id: 'random', name: '隨機遊戲', rounds: null }];
-    for (const [index, zone] of (data.menuZones ?? []).entries()) {
-      const node = renderSharedMenuZone(zone, options[index], index, options.length, data);
+    const optionById = new Map(options.map((option) => [option.id, option]));
+    const slots = data.menuSlots ?? (data.menuZones ?? []).map((zone, index) => ({
+      zoneId: zone.id, optionIds: options[index] ? [options[index].id] : []
+    }));
+    const total = slots.reduce((sum, slot) => sum + slot.optionIds.length, 0);
+    let position = 0;
+    for (const zone of data.menuZones ?? []) {
+      const slot = slots.find((item) => item.zoneId === zone.id);
+      const zoneOptions = (slot?.optionIds ?? []).map((id) => optionById.get(id)).filter(Boolean);
+      const node = renderSharedMenuZone(zone, zoneOptions, position, total, data);
+      position += zoneOptions.length;
       if (node) zones.append(node);
     }
   } else {

@@ -19,7 +19,7 @@ test('default game rules validate and round-trip through the editable settings v
   const settings = getEditableRuleSettings(defaults);
   const restored = applyEditableRuleSettings(defaults, settings);
   assert.deepEqual(getEditableRuleSettings(restored), settings);
-  assert.equal(Object.keys(settings.games).length, 7);
+  assert.equal(Object.keys(settings.games).length, 8);
 });
 
 test('older saved rules without numeric field rectangles remain valid for recovery', () => {

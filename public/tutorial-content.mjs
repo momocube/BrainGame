@@ -67,7 +67,16 @@ const tutorials = {
       ],
       schedule: `共 ${number(config, "rounds", 10)} 輪・每輪記憶 ${low}–${high} 秒／作答 ${number(config, "answerSeconds", 18)} 秒`
     };
-  }
+  },
+  slitherlink: (config) => ({
+    goal: "在點與點之間畫線，連成一條不交叉、不分岔的封閉迴圈；格子裡的數字代表這一格四邊有幾條線。",
+    steps: [
+      "點兩點之間的邊：第一下畫線，第二下打叉（確定沒有線），第三下清除。",
+      "沒有數字的格子不限制；叉叉只是記號，不影響完成判定。",
+      "整條迴圈正確時自動完成；答錯不會鎖答，可以隨時修改。"
+    ],
+    schedule: `每輪 ${number(config, "playSeconds", 180)} 秒・共 ${number(config, "rounds", 3)} 輪`
+  })
 };
 
 export function getGameTutorial(gameId, config = {}) {

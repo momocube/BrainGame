@@ -8,6 +8,7 @@ import { cubeColumnsAreReadable } from '../src/cube-visibility.mjs';
 import { createStageSnapshot } from '../src/stage-view.mjs';
 import { handleMouseInput } from '../src/mouse-input.mjs';
 import { EXIT_BUTTONS, EXIT_CONTROL_ZONE } from '../public/exit-control.mjs';
+import { edgeEndpoints } from '../src/slitherlink.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const rules = JSON.parse(fs.readFileSync(path.join(ROOT, 'config/game-rules.v1.json'), 'utf8'));
@@ -89,6 +90,8 @@ function completeRoundWithCorrectAnswer(engine) {
     for (let number = 1; number <= round.question.count; number++) {
       engine.act('P1', { index: player.values.indexOf(number) });
     }
+  } else if (gameId === 'slitherlink') {
+    for (const index of round.question.solution) engine.act('P1', { type: 'cycle_edge', index });
   }
 }
 
@@ -287,11 +290,11 @@ test('question preflight verifies every configured round without returning answe
   const report = preflightGameQuestions(rules, { seedFactory: () => seed++ >>> 0 });
   const failures = report.games.flatMap((game) => game.failures.map((failure) => ({ gameId: game.gameId, ...failure })));
   assert.equal(report.passed, true, JSON.stringify(failures));
-  assert.equal(report.gameCount, 7);
-  assert.equal(report.totalRounds, 80);
-  assert.equal(report.checkedRounds, 80);
+  assert.equal(report.gameCount, 8);
+  assert.equal(report.totalRounds, 83);
+  assert.equal(report.checkedRounds, 83);
   assert.equal(report.failedRounds, 0);
-  assert.deepEqual(report.games.map((game) => game.checkedRounds), [5, 10, 10, 20, 5, 20, 10]);
+  assert.deepEqual(report.games.map((game) => game.checkedRounds), [5, 10, 10, 20, 5, 20, 10, 3]);
 
   const privateKeys = new Set(['question', 'answer', 'seed', 'correctId', 'solution']);
   const foundPrivateKeys = [];
@@ -777,6 +780,14 @@ test('all seven games accept correct inputs from every TouchService player zone'
             round.question.cols, round.question.rows) };
         });
         tapBatch(engine, points);
+      }
+    } else if (gameId === 'slitherlink') {
+      const { boardRect: rect, boardColumns: cols, boardRows: rows } = rules.games.slitherlink;
+      for (const edge of round.question.solution) {
+        const [[x1, y1], [x2, y2]] = edgeEndpoints(edge, cols, rows);
+        const u = (rect.x + (x1 + x2) / 2 * rect.width / cols) / 640;
+        const v = (rect.y + (y1 + y2) / 2 * rect.height / rows) / 640;
+        tapBatch(engine, zoneIds.map((zoneId) => ({ zoneId, u, v })));
       }
     }
 

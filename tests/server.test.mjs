@@ -238,9 +238,9 @@ test('HTTP service starts a session, handles random selection, and reports stage
     assert.equal(preflightResponse.status, 200);
     const preflightPayload = await preflightResponse.json();
     assert.equal(preflightPayload.ok, true, JSON.stringify(preflightPayload.result.games.flatMap((game) => game.failures.map((failure) => ({ gameId: game.gameId, ...failure })))));
-    assert.equal(preflightPayload.result.gameCount, 7);
-    assert.equal(preflightPayload.result.totalRounds, 80);
-    assert.equal(preflightPayload.result.checkedRounds, 80);
+    assert.equal(preflightPayload.result.gameCount, 8);
+    assert.equal(preflightPayload.result.totalRounds, 83);
+    assert.equal(preflightPayload.result.checkedRounds, 83);
     assert.equal(preflightPayload.result.failedRounds, 0);
     assert.deepEqual(Object.keys(preflightPayload.result.games[0]).sort(), ['checkedRounds', 'failures', 'gameId', 'gameName', 'rounds']);
     const editableRules = await fetch(`${baseUrl}/api/rules`).then((response) => response.json());
@@ -252,8 +252,8 @@ test('HTTP service starts a session, handles random selection, and reports stage
     const editedPreflightPayload = await editedPreflight.json();
     assert.equal(editedPreflight.status, 200);
     assert.equal(editedPreflightPayload.ok, true);
-    assert.equal(editedPreflightPayload.result.gameCount, 6);
-    assert.equal(editedPreflightPayload.result.totalRounds, 70);
+    assert.equal(editedPreflightPayload.result.gameCount, 7);
+    assert.equal(editedPreflightPayload.result.totalRounds, 73);
     assert.equal((await fetch(`${baseUrl}/api/rules`).then((response) => response.json())).settings.games.memory_sequence.enabled, true,
       'preflight checks draft settings without saving them');
     const badDraft = structuredClone(editableRules.settings);

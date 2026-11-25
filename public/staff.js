@@ -17,7 +17,7 @@ let lastDiagnosticsData = null;
 const gameLabels = {
   minesweeper: '踩地雷', zero_sum_grid: '數字方格', cube_count: '3D 數方塊',
   solid_puzzle: '立體拼圖', memory_poker: '記憶撲克', map_view: '2D／3D 地圖定位',
-  memory_sequence: '數字速記'
+  memory_sequence: '數字速記', slitherlink: '數迴'
 };
 const ruleFieldLabels = {
   rounds: '輪數', playSeconds: '每輪時限（秒）',

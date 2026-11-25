@@ -4,15 +4,19 @@ import { cubeColumnsAreReadable } from './cube-visibility.mjs';
 import { validateGameRules } from './game-rules.mjs';
 import { EXIT_CONTROL_ZONE, EXIT_CONFIRM_HOLD_MS, EXIT_BUTTONS, canPlayerExit, exitActionAt } from '../public/exit-control.mjs';
 import { tutorialHoldTarget } from '../public/tutorial-control.mjs';
+import {
+  EDGE_BLANK, EDGE_LINE, clueCountsForLoop, countSolutions, edgeCount, generateSlitherlinkPuzzle,
+  isSingleLoop, linesMatchSolution, nextEdgeState, slitherlinkEdgeAt
+} from './slitherlink.mjs';
 
 const GAME_ORDER = [
   'minesweeper', 'zero_sum_grid', 'cube_count', 'solid_puzzle',
-  'memory_poker', 'map_view', 'memory_sequence'
+  'memory_poker', 'map_view', 'memory_sequence', 'slitherlink'
 ];
 const LABELS = {
   minesweeper: '踩地雷', zero_sum_grid: '數字方格', cube_count: '3D 數方塊',
   solid_puzzle: '立體拼圖', memory_poker: '記憶撲克',
-  map_view: '地圖定位', memory_sequence: '數字速記'
+  map_view: '地圖定位', memory_sequence: '數字速記', slitherlink: '數迴'
 };
 const CARD_RANKS = '23456789TJQKA';
 const CARD_SUITS = ['♣', '♦', '♥', '♠'];
@@ -357,7 +361,20 @@ function initialPlayerRound(gameId, question, rules, randomInt, sequenceVariantI
     variant.forEach((cell, index) => { values[cell] = index + 1; });
     return { values, hearts: rules.games.memory_sequence.heartsPerRound, progress: 0, bestProgress: 0, firstReached: {}, doneAtMs: null, eliminatedAtMs: null, presses: 0, wrongCount: 0 };
   }
+  if (gameId === 'slitherlink') {
+    return { edges: Array(edgeCount(question.cols, question.rows)).fill(EDGE_BLANK), doneAtMs: null, moves: 0 };
+  }
   return {};
+}
+
+function makeSlitherlink(round, config, randomInt) {
+  const band = difficultyBand(config, round);
+  return generateSlitherlinkPuzzle({
+    cols: config.boardColumns, rows: config.boardRows,
+    cluesMin: band.cluesMin, cluesMax: band.cluesMax,
+    regionCellsMin: band.regionCellsMin, regionCellsMax: band.regionCellsMax,
+    trialDepth: band.deductionTrialDepth
+  }, randomInt);
 }
 
 function gridNeighbors(index, cols, rows) {
@@ -467,6 +484,7 @@ function generateQuestion(gameId, round, rules, randomInt) {
     case 'memory_poker': return makePoker(round, config, randomInt);
     case 'map_view': return makeMapQuestion(round, config, randomInt);
     case 'memory_sequence': return makeMemorySequence(round, config, randomInt);
+    case 'slitherlink': return makeSlitherlink(round, config, randomInt);
     default: throw new Error(`未知遊戲：${gameId}`);
   }
 }
@@ -609,6 +627,20 @@ function validateGeneratedQuestion(gameId, round, question, rules) {
           positions.length !== count || new Set(positions).size !== count ||
           positions.some((index) => !Number.isInteger(index) || index < 0 || index >= boardSize))) {
       generatedQuestionError(`數字速記第 ${round} 輪序列位置或時間設定錯誤`);
+    }
+    return;
+  }
+
+  if (gameId === 'slitherlink') {
+    const band = difficultyBand(config, round);
+    const { cols, rows, clues, solution } = question;
+    const shown = clues?.filter((clue) => clue != null).length ?? -1;
+    const counts = Array.isArray(solution) ? clueCountsForLoop(solution, cols, rows) : [];
+    if (cols !== config.boardColumns || rows !== config.boardRows || !Array.isArray(clues) || clues.length !== cols * rows ||
+        clues.some((clue, cell) => clue != null && (!Number.isInteger(clue) || clue < 0 || clue > 3 || clue !== counts[cell])) ||
+        shown < band.cluesMin || shown > band.cluesMax || question.clueCount !== shown ||
+        !isSingleLoop(solution, cols, rows) || countSolutions(cols, rows, clues, 2) !== 1) {
+      generatedQuestionError(`數迴第 ${round} 輪提示數字、迴圈或唯一解錯誤`);
     }
     return;
   }
@@ -795,6 +827,7 @@ export class GameEngine {
     state.availableGames = this.gameOrder.map((id) => ({ id, name: this.rules.games[id].displayName ?? LABELS[id], rounds: this.rules.games[id].rounds }));
     state.zones = this.zones.map((z) => ({ id: z.id, name: z.name, rotationDegrees: z.rotationDegrees, rect: z.rect }));
     state.menuZones = this.menuZones.map((z) => ({ id: z.id, name: z.name, rotationDegrees: z.rotationDegrees, rect: z.rect }));
+    state.menuSlots = this.menuSlots();
     state.questionPanels = this.layout.questionPanels.map((panel) => ({
       id: panel.id, playerId: panel.playerId, name: panel.name,
       rotationDegrees: panel.rotationDegrees, rect: panel.rect
@@ -1120,6 +1153,7 @@ export class GameEngine {
     else if (gameId === 'solid_puzzle' || gameId === 'map_view') this.choiceAction(player, action, gameId, actionAtMs);
     else if (gameId === 'memory_poker') this.pokerAction(player, action, actionAtMs);
     else if (gameId === 'memory_sequence') this.sequenceAction(player, action, round.question, actionAtMs);
+    else if (gameId === 'slitherlink') this.slitherlinkAction(player, action, round.question, actionAtMs);
     this.recordPlayerInput(zoneId, action, {
       phase: 'playing', roundId: round.id, gameId, round: round.round, elapsedMs: actionAtMs
     });
@@ -1246,6 +1280,15 @@ export class GameEngine {
     }
   }
 
+  slitherlinkAction(player, action, question, actionAtMs) {
+    if (action.type !== 'cycle_edge') return;
+    const index = Number(action.index);
+    if (!Number.isInteger(index) || index < 0 || index >= player.edges.length) return;
+    player.edges[index] = nextEdgeState(player.edges[index]);
+    player.moves++;
+    if (linesMatchSolution(player.edges, question.solution)) player.doneAtMs = actionAtMs;
+  }
+
   coordinateAction(zoneId, u, v, heldMs = 0, eventElapsedMs = null) {
     const layout = this.rules.common.layout;
     const width = layout.localDesignWidth;
@@ -1325,6 +1368,12 @@ export class GameEngine {
       const row = Math.floor((y - rect.y) / rect.height * rows);
       const key = layout.numericKeypadKeys[row * columns + col];
       if (key && key !== 'spacer') this.act(zoneId, { key }, eventElapsedMs);
+      return;
+    }
+    if (gameId === 'slitherlink') {
+      const config = this.rules.games.slitherlink;
+      const index = slitherlinkEdgeAt(x, y, config.boardRect, config.boardColumns, config.boardRows);
+      if (index != null) this.act(zoneId, { type: 'cycle_edge', index }, eventElapsedMs);
       return;
     }
     if (gameId === 'memory_sequence') {
@@ -1578,9 +1627,23 @@ export class GameEngine {
     return null;
   }
 
+  /**
+   * Shared lobby menu: one option per wall menu zone. When there are more options than walls
+   * (eight games plus random), the last wall is split left-to-right among the remaining options.
+   */
+  menuSlots() {
+    const options = [...this.gameOrder, RANDOM_GAME_ID];
+    const lastIndex = this.menuZones.length - 1;
+    return this.menuZones.map((zone, index) => ({
+      zoneId: zone.id,
+      optionIds: options.length > this.menuZones.length && index === lastIndex
+        ? options.slice(index) : options.slice(index, index + 1)
+    })).filter((slot) => slot.optionIds.length);
+  }
+
   gamePreviewActionAt(zoneId, u, v) {
-    const menuIndex = this.menuZones.findIndex((zone) => zone.id === zoneId);
-    if (menuIndex < 0 || this.gameOrder[menuIndex] !== this.state.selectedGame) return null;
+    const slot = this.menuSlots().find((item) => item.zoneId === zoneId);
+    if (!slot?.optionIds.includes(this.state.selectedGame)) return null;
     const buttons = [
       { action: 'confirm', x: 0.25 },
       { action: 'cancel', x: 0.75 }
@@ -1593,13 +1656,13 @@ export class GameEngine {
 
   lobbyGameAt(zoneId, u, v) {
     if (this.state.phase !== 'lobby' || !this.state.participantIds.length) return null;
-    const index = this.menuZones.findIndex((zone) => zone.id === zoneId);
-    if (index < 0) return null;
+    const slot = this.menuSlots().find((item) => item.zoneId === zoneId);
+    if (!slot) return null;
     const layout = this.rules.common.layout;
     const x = u * layout.localDesignWidth, y = v * layout.localDesignHeight;
     const rect = layout.interactiveRect;
     if (x < 0 || y < rect.y || x >= layout.localDesignWidth || y >= rect.y + rect.height) return null;
-    return index < this.gameOrder.length ? this.gameOrder[index] : index === this.gameOrder.length ? RANDOM_GAME_ID : null;
+    return slot.optionIds[Math.min(slot.optionIds.length - 1, Math.floor(u * slot.optionIds.length))];
   }
 
   tick(deltaMs = null) {
@@ -1767,7 +1830,8 @@ export class GameEngine {
         elapsedMs: player.doneAtMs,
         mineHits: player.hits?.length ?? 0,
         sequenceProgress: player.bestProgress ?? null,
-        pokerHand: player.hand ?? null
+        pokerHand: player.hand ?? null,
+        slitherlinkLines: player.edges ? player.edges.filter((state) => state === EDGE_LINE).length : null
       })),
       answer: answerForRound(round)
     };
@@ -1807,6 +1871,7 @@ function answerForRound(round) {
   if (id === 'memory_poker') return { community: q.community.map((c) => c.label) };
   if (id === 'map_view') return { correctId: q.correctId, correct: q.correct, landmarks: q.landmarks };
     if (id === 'memory_sequence') return { count: q.count };
+  if (id === 'slitherlink') return { cols: q.cols, rows: q.rows, clues: q.clues, solution: q.solution };
   return null;
 }
 

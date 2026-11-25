@@ -17,6 +17,7 @@ for (const required of [
   'src/mouse-input.mjs', 'public/mouse-input.mjs',
   'public/exit-control.mjs',
   'public/tutorial-control.mjs',
+  'src/slitherlink.mjs', 'public/slitherlink-board.mjs',
   'src/server.mjs', 'src/game-engine.mjs', 'src/cube-visibility.mjs', 'src/player-layouts.mjs', 'src/player-zone-geometry.mjs',
   'src/touch-protocol.mjs', 'src/desktop/main.mjs', 'src/desktop/display-layout.mjs', 'src/desktop/instance-handoff.mjs',
   'src/desktop/operation-manual.mjs', 'src/desktop/touch-service-manager.mjs', 'src/desktop/preload.cjs', 'src/touch-service-status.mjs',

@@ -8,7 +8,7 @@ const EDITABLE_GAME_FIELDS = new Set([
 const FIXED_OPTION_COUNTS = new Map([['solid_puzzle', 6], ['map_view', 6]]);
 const SUPPORTED_GAME_IDS = new Set([
   'minesweeper', 'zero_sum_grid', 'cube_count', 'solid_puzzle',
-  'memory_poker', 'map_view', 'memory_sequence'
+  'memory_poker', 'map_view', 'memory_sequence', 'slitherlink'
 ]);
 const GAME_ENUM_FIELDS = {
   minesweeper: {
@@ -40,6 +40,11 @@ const GAME_ENUM_FIELDS = {
     variantStrategy: ['identity_horizontal_vertical_both_mirrors'],
     endCondition: ['all_finished_or_eliminated_or_deadline'],
     ranking: ['finished_time_then_best_prefix_desc_then_first_reached_time']
+  },
+  slitherlink: {
+    tapCycle: ['line_cross_blank'], completion: ['lines_match_unique_solution'],
+    endCondition: ['n_minus_one_correct_or_deadline_single_player_requires_completion'],
+    ranking: ['correct_completion_time']
   }
 };
 
@@ -234,7 +239,8 @@ function validateGameStructure(gameId, config) {
     solid_puzzle: ['playSeconds', 'optionCount', 'wrongAnswerLockSeconds'],
     memory_poker: ['deckSize', 'jokers', 'memoryCards', 'memoryGridColumns', 'memoryGridRows', 'memorySeconds', 'selectionSeconds', 'revealCountdownSeconds', 'communityCards', 'selectedCardsRequired'],
     map_view: ['playSeconds', 'optionCount', 'choiceGridColumns', 'choiceGridRows', 'wrongAnswerLockSeconds', 'minimumDistinctVisibleClues'],
-    memory_sequence: ['boardColumns', 'boardRows', 'answerSeconds', 'heartsPerRound', 'wrongAnswerLockSeconds', 'wrongAnswerPenaltySeconds']
+    memory_sequence: ['boardColumns', 'boardRows', 'answerSeconds', 'heartsPerRound', 'wrongAnswerLockSeconds', 'wrongAnswerPenaltySeconds'],
+    slitherlink: ['boardColumns', 'boardRows', 'playSeconds']
   }[gameId];
   const booleans = {
     minesweeper: ['sameBoardForAllPlayers', 'zeroFloodReveal', 'flagBlocksReveal', 'chordRevealEnabled'],
@@ -243,7 +249,8 @@ function validateGameStructure(gameId, config) {
     solid_puzzle: ['confirmationRequired', 'removeWrongOptions', 'clearSelectionOnWrongAnswer', 'allOptionsSameCubeCount', 'allowRigidRotation', 'allowReflection', 'validateInsertionMotionPath'],
     memory_poker: ['communityCardsVisibleDuringMemory', 'uniqueCardsAcrossMemoryAndCommunity', 'sameCardMayBeSelectedByDifferentPlayers', 'samePositionTwiceForOnePlayer', 'confirmationLocksSelection', 'autoSubmitCompleteSelectionAtDeadline', 'replaceSelectionOnThirdCardTap', 'selectedCardsRemainHiddenUntilResults', 'suitsBreakTies', 'selectionSpeedBreaksTies', 'aceLowStraightAllowed', 'wrapAroundStraightAllowed'],
     map_view: ['confirmationRequired', 'clearSelectionOnWrongAnswer', 'removeWrongOptions', 'answerIncludesPositionAndHeading', 'playerControlledCamera', 'sameLabelsForAllPlayers'],
-    memory_sequence: ['resetToFirstNumberOnError', 'reshuffleOnError', 'revealMemoryAgainOnError', 'reconcealCompletedCellsOnError', 'emptyOrPreviouslyCompletedCellCountsAsError', 'retainBestPrefixOnError', 'remainingHeartsBreakTies']
+    memory_sequence: ['resetToFirstNumberOnError', 'reshuffleOnError', 'revealMemoryAgainOnError', 'reconcealCompletedCellsOnError', 'emptyOrPreviouslyCompletedCellCountsAsError', 'retainBestPrefixOnError', 'remainingHeartsBreakTies'],
+    slitherlink: ['sameBoardForAllPlayers', 'crossMarksAffectCompletion']
   }[gameId];
   const commonRequired = ['rounds', ...(['memory_poker', 'memory_sequence'].includes(gameId) ? [] : ['playSeconds'])];
   const gameRequired = {
@@ -253,7 +260,8 @@ function validateGameStructure(gameId, config) {
     solid_puzzle: ['optionCount', 'choiceGridRect', 'confirmRect', 'difficultyBands'],
     memory_poker: ['deckSize', 'jokers', 'memoryCards', 'memoryGridColumns', 'memoryGridRows', 'memorySeconds', 'selectionSeconds', 'revealCountdownSeconds', 'communityCards', 'selectedCardsRequired', 'cardGridRect', 'selectionInfoRect', 'confirmRect'],
     map_view: ['optionCount', 'choiceGridColumns', 'choiceGridRows', 'minimumDistinctVisibleClues', 'headings', 'mapPanelRect', 'choiceGridRect', 'confirmRect', 'difficultyBands'],
-    memory_sequence: ['boardColumns', 'boardRows', 'numberCountByRound', 'memorySecondsByRound', 'heartDisplayRowsOneBased', 'answerSeconds', 'heartsPerRound']
+    memory_sequence: ['boardColumns', 'boardRows', 'numberCountByRound', 'memorySecondsByRound', 'heartDisplayRowsOneBased', 'answerSeconds', 'heartsPerRound'],
+    slitherlink: ['boardColumns', 'boardRows', 'boardRect', 'incompletePoints', 'difficultyBands']
   }[gameId];
   assertRequiredFields(config, [...commonRequired, ...gameRequired], gameId);
   for (const field of numericBounds) {
@@ -317,6 +325,19 @@ function validateGameStructure(gameId, config) {
         config.heartDisplayRowsOneBased[0] !== 9 || config.heartDisplayRowsOneBased[1] !== 10) {
       throw new Error('數字速記心數必須顯示在第 9、10 排');
     }
+  }
+  if (gameId === 'slitherlink') {
+    assertInteger(config.boardColumns, `${gameId}.boardColumns`, 3, 7);
+    assertInteger(config.boardRows, `${gameId}.boardRows`, 3, 7);
+    assertInteger(config.incompletePoints, 'slitherlink.incompletePoints', 0, 10000);
+    if (config.sameBoardForAllPlayers !== true || config.crossMarksAffectCompletion !== false) {
+      throw new Error('數迴需全員共用同一題，且叉叉只作記號、不影響完成判定');
+    }
+    const rect = config.boardRect;
+    if (rect.width * config.boardRows !== rect.height * config.boardColumns) {
+      throw new Error('數迴棋盤格必須是正方形');
+    }
+    if (rect.y < 128) throw new Error('數迴棋盤不可進入第 9、10 排狀態區');
   }
   if (gameId === 'memory_poker') {
     if (config.deckSize !== 52 || config.jokers !== 0 || config.selectedCardsRequired !== 2) {
@@ -392,6 +413,13 @@ function assertBands(gameId, config) {
       if (band.landmarkTypes < config.minimumDistinctVisibleClues) {
         throw new Error('地圖地標數不可少於要求的可見線索數');
       }
+    } else if (gameId === 'slitherlink') {
+      const cells = config.boardColumns * config.boardRows;
+      assertInteger(band.cluesMin, 'slitherlink.cluesMin', 0, cells);
+      assertInteger(band.cluesMax, 'slitherlink.cluesMax', band.cluesMin, cells);
+      assertInteger(band.regionCellsMin, 'slitherlink.regionCellsMin', 2, cells - 1);
+      assertInteger(band.regionCellsMax, 'slitherlink.regionCellsMax', band.regionCellsMin, cells - 1);
+      assertInteger(band.deductionTrialDepth, 'slitherlink.deductionTrialDepth', 0, 1);
     }
   }
   if (nextRound !== config.rounds + 1) throw new Error(`${gameId} 難度級距必須完整覆蓋 ${config.rounds} 輪`);
