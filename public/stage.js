@@ -291,19 +291,6 @@ function renderSlitherlinkZone(body, slither = {}, q = {}, config = {}, solution
   body.append(board);
 }
 
-function renderSlitherlinkFloor(q = {}, answer = null) {
-  const wrap = el('div', 'floor-stack');
-  wrap.append(el('div', 'floor-title', answer ? '數迴・本輪解答' : '數迴'));
-  wrap.append(el('div', 'floor-subtitle', '在牆面點與點之間畫線，連成一條不交叉、不分岔的封閉迴圈；數字＝該格四邊的線段數'));
-  const board = el('div', 'slither-floor-board');
-  board.innerHTML = slitherlinkBoardSvg({
-    cols: q.cols ?? answer?.cols, rows: q.rows ?? answer?.rows, clues: q.clues ?? answer?.clues ?? [],
-    edges: [], solution: answer?.solution ?? null, label: answer ? '數迴解答' : '數迴題目'
-  });
-  wrap.append(board);
-  return wrap;
-}
-
 function renderMineZone(body, mine = {}, q = {}, config = {}, layout = {}) {
   body.classList.add('mine-body');
   const flagMode = mine.mode === 'flag';
@@ -550,11 +537,7 @@ function renderFloor(data) {
     return;
   }
   if (data.phase === 'countdown') return renderCountdown(data, floor);
-  if (data.currentRound?.gameId === 'slitherlink') {
-    if (data.phase === 'playing') return renderPlayerProgress(data, floor);
-    if (data.phase === 'round_results') return renderRoundStandings(data, floor);
-  }
-  if (data.layout?.questionDisplayMode !== 'player-panels') {
+  if (!['player-panels', 'player-only'].includes(data.layout?.questionDisplayMode)) {
     renderQuestionDisplay(data, floor);
     return;
   }
@@ -606,14 +589,12 @@ function renderQuestionDisplay(data, target) {
   if (data.phase === 'final_results') return renderFinalResult(data, target);
   if (data.phase !== 'playing' || !data.currentRound) return showTitle('704 腦力競賽', data.notice ?? '', target);
   const round = data.currentRound;
-  if (round.gameId === 'minesweeper') showTitle('踩地雷', '牆面各自操作盤面；翻開所有安全格', target);
-  else if (round.gameId === 'zero_sum_grid') target.append(renderZeroGrid(round.question));
+  if (round.gameId === 'zero_sum_grid') target.append(renderZeroGrid(round.question));
   else if (round.gameId === 'cube_count') target.append(renderCubeViews(round.question, null, data.gameRules?.games?.cube_count));
   else if (round.gameId === 'solid_puzzle') target.append(renderPuzzleFloor(round.question));
   else if (round.gameId === 'memory_poker') target.append(renderPokerFloor(round));
   else if (round.gameId === 'map_view') target.append(renderMapFirstPerson(round.question));
   else if (round.gameId === 'memory_sequence') showTitle('數字速記', `${round.question?.count ?? ''} 個數字　記憶 ${round.question?.memorySeconds ?? ''} 秒，蓋牌後依序點按`, target);
-  else if (round.gameId === 'slitherlink') target.append(renderSlitherlinkFloor(round.question));
 }
 
 function renderCountdown(data, target) {
@@ -692,20 +673,6 @@ function renderRoundStandings(data, target) {
   }
   wrap.append(grid);
   target.append(wrap);
-}
-function renderMineSolution(q = {}) {
-  const wrap = el('div', 'floor-stack');
-  wrap.append(el('div', 'floor-title', '踩地雷・本輪解答'), el('div', 'floor-subtitle', `地雷 ${q.mines?.length ?? 0} 顆`));
-  const board = el('div', 'floor-board');
-  const cols = q.cols ?? 8, rows = q.rows ?? 6;
-  board.style.gridTemplateColumns = `repeat(${cols},minmax(0,1fr))`;
-  board.style.gridTemplateRows = `repeat(${rows},minmax(0,1fr))`;
-  const mines = new Set(q.mines ?? []);
-  for (let i = 0; i < cols * rows; i++) {
-    const cell = el('div', `floor-number${mines.has(i) ? ' mine' : ''}`, mines.has(i) ? '✹' : q.numbers?.[i] ? String(q.numbers[i]) : '');
-    board.append(cell);
-  }
-  wrap.append(board); return wrap;
 }
 function renderZeroGrid(q = {}, answer = null) {
   const cols = q.cols ?? 5, rows = q.rows ?? 5;
@@ -956,14 +923,12 @@ function renderRoundResult(data, target = floor) {
   wrap.append(el('div', 'floor-title', `${result?.gameName ?? ''}・第 ${result?.round ?? ''} 輪結算`));
   const round = data.currentRound, q = round?.question ?? {};
   const answerPanel = el('div', 'round-result-question');
-  if (result?.gameId === 'minesweeper') answerPanel.append(renderMineSolution(q));
-  else if (result?.gameId === 'zero_sum_grid') answerPanel.append(renderZeroGrid(q, result.answer));
+  if (result?.gameId === 'zero_sum_grid') answerPanel.append(renderZeroGrid(q, result.answer));
   else if (result?.gameId === 'cube_count') answerPanel.append(renderCubeViews(q, result.answer, data.gameRules?.games?.cube_count));
   else if (result?.gameId === 'solid_puzzle') answerPanel.append(renderPuzzleFloor(q, result.answer));
   else if (result?.gameId === 'memory_poker') answerPanel.append(renderPokerFloor(round));
   else if (result?.gameId === 'map_view') answerPanel.append(renderMapFloor(q, result.answer));
   else if (result?.gameId === 'memory_sequence') answerPanel.append(el('div', 'floor-subtitle', '請查看牆面，揭露本區數字順序與本輪最佳進度'));
-  else if (result?.gameId === 'slitherlink') answerPanel.append(renderSlitherlinkFloor(q, result.answer));
   wrap.append(answerPanel);
   const grid = el('div', 'result-grid scoreboard');
   const rows = [...(result?.rows ?? [])].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999));

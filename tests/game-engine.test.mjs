@@ -1281,7 +1281,7 @@ test('stage projections keep active players active and withhold answer keys', ()
 });
 
 test('stage snapshot exposes the active player template and output-only 4-player question panels', () => {
-  const four = createEngine('minesweeper', { participants: ['P1', 'P2', 'P3', 'P4'] });
+  const four = createEngine('zero_sum_grid', { participants: ['P1', 'P2', 'P3', 'P4'] });
   const fourView = createStageSnapshot(four, rules, zones);
   assert.equal(fourView.layout.profileCount, 4);
   assert.equal(fourView.layout.questionDisplayMode, 'player-panels');
@@ -1290,7 +1290,7 @@ test('stage snapshot exposes the active player template and output-only 4-player
   assert.ok(fourView.questionPanels.every((panel, index) => panel.playerId === `P${index + 1}`));
   assert.ok(fourView.questionPanels.every((panel) => !Object.hasOwn(panel, 'sources')));
 
-  const five = createEngine('minesweeper', { participants: ['P1', 'P2', 'P3', 'P4', 'P5'] });
+  const five = createEngine('zero_sum_grid', { participants: ['P1', 'P2', 'P3', 'P4', 'P5'] });
   const fiveView = createStageSnapshot(five, rules, zones);
   assert.equal(fiveView.layout.profileCount, 5);
   assert.equal(fiveView.layout.questionDisplayMode, 'floor');
@@ -2010,4 +2010,42 @@ test('poker reveals community before memory, gates selection, and preserves comm
   advance(engine, config.revealCountdownSeconds * 1000);
   assert.equal(engine.state.phase, 'round_results');
   assert.equal(view().cards.length, 16);
+});
+
+test('minesweeper and slitherlink use only player boards across all player counts and phases', () => {
+  for (const gameId of ['minesweeper', 'slitherlink']) for (let count = 1; count <= 8; count++) {
+    const engine = new GameEngine({ rules, zones, onSave() {}, seedFactory: () => 1234 });
+    startReadySession(engine);
+    for (let i = 1; i <= count; i++) engine.join(`P${i}`);
+    engine.selectGame(gameId);
+    const check = () => {
+      const view = createStageSnapshot(engine, rules, zones);
+      assert.deepEqual(view.questionPanels, [], `${gameId}/${count}/${view.phase}`);
+      assert.equal(view.layout.questionDisplayMode, 'player-only');
+      assert.equal(view.layout.floorRole, 'standings');
+      assert.equal(view.zones.length, Math.max(4, count));
+      assert.equal(engine.layout.questionPanels.length, count <= 4 ? 4 : 0, 'base geometry is not mutated');
+    };
+    check();
+    engine.confirmGameSelection(); check();
+    engine.startAfterTutorial(); check();
+    advance(engine, 3000); check();
+    engine.pause(); check();
+    engine.resume(); check();
+    advance(engine, rules.common.resumeCountdownSeconds * 1000); check();
+    engine.finishRound('deadline'); check();
+    const view = createStageSnapshot(engine, rules, zones);
+    assert.ok(view.currentRound.question, 'player result boards keep their question');
+    assert.equal(view.results[0].rows.length, count);
+  }
+});
+
+test('games needing a shared question retain their normal wall or floor display', () => {
+  for (const count of [4, 8]) {
+    const participants = Array.from({ length: count }, (_, i) => `P${i+1}`);
+    const engine = createEngine('zero_sum_grid', { participants });
+    const view = createStageSnapshot(engine, rules, zones);
+    assert.equal(view.layout.questionDisplayMode, count === 4 ? 'player-panels' : 'floor');
+    assert.equal(view.questionPanels.length, count === 4 ? 4 : 0);
+  }
 });

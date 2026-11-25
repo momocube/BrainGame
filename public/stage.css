@@ -340,3 +340,8 @@
 @keyframes tutorial-step{0%,33.32%{color:#f4fcff;border-color:#70e4ce;background:#154c48}33.33%,100%{color:#9eafc5;border-color:transparent;background:transparent}}
 @keyframes tutorial-tap{0%{transform:scale(.8);opacity:1}100%{transform:scale(1.35);opacity:.25}}
 @media(prefers-reduced-motion:reduce){.tutorial-tap-ring{animation:none}.tutorial-frames{display:flex;align-items:center}.tutorial-frame{position:relative;inset:auto;width:33.333%;height:140px;flex:none;opacity:1;animation:none}.tutorial-solid-demo{transform:scale(.333333);transform-origin:top left}.tutorial-visual-step{animation:none;color:#f4fcff}}
+
+/* Opening 3/2/1: ten times the previous title size, with a tight line box to fit walls. */
+.floor-title.game-countdown{font-size:21em;line-height:1;flex:none;font-variant-numeric:tabular-nums}
+.question-content .game-countdown{font-size:20em}
+.zone-body .game-countdown{font-size:480px}

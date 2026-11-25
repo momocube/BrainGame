@@ -10,6 +10,13 @@ export function createStageSnapshot(engine, rules, zones) {
   snapshot.gameRules = rules;
   snapshot.reservedRects = structuredClone(zones.reservedRects ?? []);
   const sourceRound = engine.state.currentRound;
+  // These games contain the question on each player's interactive board.
+  // Apply this before the paused/tutorial early return so spare walls stay clear.
+  if (['slitherlink', 'minesweeper'].includes(sourceRound?.gameId ?? snapshot.selectedGame)) {
+    snapshot.questionPanels = [];
+    snapshot.layout.questionDisplayMode = 'player-only';
+    snapshot.layout.floorRole = 'standings';
+  }
   const playerViews = Object.fromEntries(engine.zones.map((zone) => {
     const participant = engine.state.participants[zone.id];
     return [zone.id, {
