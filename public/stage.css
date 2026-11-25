@@ -305,3 +305,38 @@
 .zero-board-area{flex:1;min-height:0;width:100%;display:grid;place-items:center;container-type:size}
 .zero-grid .zero-board-area>.floor-board{width:min(100cqw,calc(100cqh * var(--zero-ratio)));height:auto;aspect-ratio:var(--zero-ratio);max-width:100%;max-height:100%}
 .zero-grid .floor-number,#floor>.zero-grid .floor-number{min-width:0;min-height:0;font-size:min(3.6em,calc(100cqmin / (var(--zero-cols) * 2.1)));line-height:1}
+
+.shared-game-icon{width:220px;height:220px;object-fit:contain;display:block}
+.shared-game-tile{gap:12px;padding:18px}
+.puzzle-choice-body,.poker-body{position:relative}
+.puzzle-confirm{display:flex;align-items:center;justify-content:center;gap:32px}
+.choice-selection-count{font-size:42px;line-height:1}
+.poker-selection-detail{font-size:42px;height:60px;min-height:60px;line-height:60px}
+.poker-info.selection-count{font-size:54px;line-height:1.25;flex:none}
+.poker-preview-message{font-size:48px;text-align:center;padding-top:120px;padding-bottom:36px}
+.question-content{position:relative}
+.round-timer{position:absolute;right:20px;top:12px;padding:8px 16px;border-radius:12px;background:#08121ee8;color:#ffde7b;font-size:32px;font-weight:900;line-height:1.1;pointer-events:none;z-index:2}
+.puzzle-answer-piece .puzzle-answer-svg{width:100%;height:auto;flex:1;min-height:0;max-height:88%}
+/* One shared, illustrated tutorial per physical wall. */
+.tutorial-wall{position:absolute;overflow:hidden;background:#101d30;border:2px solid #536b88}
+.tutorial-wall-content{position:absolute;left:50%;top:50%;padding:24px;display:flex;flex-direction:column;align-items:center;gap:12px;transform-origin:center;overflow:hidden}
+.tutorial-wall-header{height:90px;flex:none;width:1200px;display:flex;align-items:center;gap:24px;font-size:40px}
+.tutorial-wall-icon{width:80px;height:80px;object-fit:contain}
+.tutorial-wall-header>span{margin-left:auto;color:#9eb8d7;font-size:26px}
+.tutorial-demo{width:1200px;height:420px;flex:none;display:grid;grid-template-columns:640px 1fr;gap:32px;align-items:center}
+.tutorial-frames{position:relative;width:640px;height:420px;background:#0a1423;border-radius:20px;overflow:hidden}
+.tutorial-frame{position:absolute;inset:0;opacity:0;animation:tutorial-slide 9s step-end infinite;animation-delay:var(--slide-delay)}
+.tutorial-frame>svg{display:block;width:100%;height:100%}
+.tutorial-visual-steps{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:24px}
+.tutorial-visual-step{display:flex;align-items:center;gap:18px;padding:20px 16px;min-height:98px;border:3px solid transparent;border-radius:16px;font-size:29px;line-height:1.35;color:#9eafc5;animation:tutorial-step 9s step-end infinite;animation-delay:var(--slide-delay)}
+.tutorial-step-number{width:48px;height:48px;flex:none;border:2px solid currentColor;border-radius:50%;display:grid;place-items:center}
+.tutorial-wall-footer{height:48px;flex:none;display:grid;place-items:center;color:#bdd4ec;font-size:26px}
+.tutorial-solid-demo{width:640px;height:420px;display:flex;align-items:center;flex-direction:column;justify-content:center;gap:8px}
+.tutorial-solid-demo>svg{width:640px;height:320px;flex:none}
+.tutorial-demo-caption,.tutorial-demo-confirm{height:64px;display:grid;place-items:center;font-size:30px;font-weight:700}
+.tutorial-demo-confirm{width:360px;border:3px solid #63e3ca;border-radius:10px;background:#147d70}
+.tutorial-tap-ring{animation:tutorial-tap 1s ease-out infinite;transform-box:fill-box;transform-origin:center}
+@keyframes tutorial-slide{0%,33.32%{opacity:1}33.33%,100%{opacity:0}}
+@keyframes tutorial-step{0%,33.32%{color:#f4fcff;border-color:#70e4ce;background:#154c48}33.33%,100%{color:#9eafc5;border-color:transparent;background:transparent}}
+@keyframes tutorial-tap{0%{transform:scale(.8);opacity:1}100%{transform:scale(1.35);opacity:.25}}
+@media(prefers-reduced-motion:reduce){.tutorial-tap-ring{animation:none}.tutorial-frames{display:flex;align-items:center}.tutorial-frame{position:relative;inset:auto;width:33.333%;height:140px;flex:none;opacity:1;animation:none}.tutorial-solid-demo{transform:scale(.333333);transform-origin:top left}.tutorial-visual-step{animation:none;color:#f4fcff}}

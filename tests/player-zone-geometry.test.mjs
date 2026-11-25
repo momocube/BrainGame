@@ -152,3 +152,14 @@ test('shared exit strip occupies a fixed real wall gap for every player layout',
   wrongFace.sharedExitControl.face = 5;
   assert.throws(() => validatePlayerZoneConfig(wrongFace, touchProfile), /退出按鈕.*牆面/);
 });
+
+
+test('independent random menu has a full wall and cannot overlap the entrance or games', () => {
+  assert.equal(layout.menuExtraZones.length, 1);
+  const random = layout.menuExtraZones[0];
+  assert.deepEqual(random.rect, { x: 1408, y: 2048, width: 640, height: 640 });
+  assert.equal(random.rotationDegrees, 180);
+  const bad = structuredClone(layout);
+  bad.menuExtraZones[0].rect.x = 1344;
+  assert.throws(() => validatePlayerZoneConfig(bad, touchProfile), /入口保留區/);
+});

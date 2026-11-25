@@ -210,6 +210,9 @@ test('HTTP service starts a session, handles random selection, and reports stage
   try {
     const health = await waitForHealth(baseUrl, child, () => output);
     assert.equal(health.phase, 'idle');
+    const iconResponse = await fetch(`${baseUrl}/icons/08_slitherlink.png`);
+    assert.equal(iconResponse.status, 200);
+    assert.equal(iconResponse.headers.get('content-type'), 'image/png');
     const selfCheck = await waitUntil(
       async () => fetch(`${baseUrl}/api/state?view=diagnostics`).then((response) => response.json()),
       (value) => value.input?.detail?.includes('啟動自檢'),
@@ -700,7 +703,7 @@ test('HTTP service starts a session, handles random selection, and reports stage
     const fullArchive = await fetch(`${baseUrl}/api/sessions/${sessions[0].sessionId}.json`);
     assert.equal(fullArchive.status, 200);
     assert.match(fullArchive.headers.get('content-type'), /application\/json/);
-    assert.equal((await fullArchive.json()).rulesSnapshot.rulesVersion, '1.0.14');
+    assert.equal((await fullArchive.json()).rulesSnapshot.rulesVersion, '1.0.15');
     assert.equal((await fetch(`${baseUrl}/api/sessions/not-a-session.csv`)).status, 404);
 
     const selected = await postControl({ action: 'select-random-game' });

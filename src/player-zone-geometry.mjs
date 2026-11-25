@@ -129,8 +129,12 @@ export function validatePlayerZoneConfig(layout, touchProfile) {
     }
   }
 
+  if (layout.menuExtraZones?.length) {
+    const { profilePlan, menuExtraZones, ...base } = layout;
+    validatePlayerZoneConfig({ ...base, players: [...layout.players, ...menuExtraZones] }, touchProfile);
+  }
   if (layout.profilePlan) {
-    const { profilePlan, ...sharedConfig } = layout;
+    const { profilePlan, menuExtraZones, ...sharedConfig } = layout;
     for (const expectedCount of [4, 5, 6, 7, 8]) {
       const profile = resolvePlayerLayout({ ...sharedConfig, profilePlan }, expectedCount);
       if (profile.players.length !== expectedCount) {

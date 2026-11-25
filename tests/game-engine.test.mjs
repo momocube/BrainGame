@@ -81,7 +81,7 @@ function completeRoundWithCorrectAnswer(engine) {
     engine.act('P1', { type: 'select', id: round.question.correctId });
     engine.act('P1', { type: 'confirm' });
   } else if (gameId === 'memory_poker') {
-    advance(engine, rules.games.memory_poker.memorySeconds * 1_000);
+    advance(engine, (rules.games.memory_poker.communityRevealSeconds + rules.games.memory_poker.memorySeconds) * 1_000);
     engine.act('P1', { type: 'toggle_card', index: 0 });
     engine.act('P1', { type: 'toggle_card', index: 1 });
     advance(engine, (rules.games.memory_poker.selectionSeconds + rules.games.memory_poker.revealCountdownSeconds) * 1_000);
@@ -623,7 +623,7 @@ test('memory poker keeps memory and selection phases separate and locks two-card
   engine.act('P1', { type: 'toggle_card', index: 0 });
   assert.deepEqual(player.selected, []);
 
-  advance(engine, rules.games.memory_poker.memorySeconds * 1_000);
+  advance(engine, (rules.games.memory_poker.communityRevealSeconds + rules.games.memory_poker.memorySeconds) * 1_000);
   engine.act('P1', { type: 'toggle_card', index: 0 });
   engine.act('P1', { type: 'toggle_card', index: 1 });
   engine.act('P1', { type: 'toggle_card', index: 2 });
@@ -656,7 +656,7 @@ test('memory poker settles equivalent hands as ties and gives incomplete selecti
   question.cards = [...selectedCards, ...fillers].slice(0, rules.games.memory_poker.memoryCards);
   question.community = community;
 
-  advance(engine, rules.games.memory_poker.memorySeconds * 1_000);
+  advance(engine, (rules.games.memory_poker.communityRevealSeconds + rules.games.memory_poker.memorySeconds) * 1_000);
   for (const index of [0, 1]) engine.act('P1', { type: 'toggle_card', index });
   for (const index of [2, 3]) engine.act('P2', { type: 'toggle_card', index });
   for (const index of [4, 5]) engine.act('P3', { type: 'toggle_card', index });
@@ -769,7 +769,7 @@ test('all seven games accept correct inputs from every TouchService player zone'
       tapSharedPoint(engine, rules.games[gameId].confirmRect, 0, 0, 1, 1);
     } else if (gameId === 'memory_poker') {
       const config = rules.games.memory_poker;
-      advance(engine, config.memorySeconds * 1_000);
+      advance(engine, (config.communityRevealSeconds + config.memorySeconds) * 1_000);
       for (const cardIndex of [0, 1]) tapSharedPoint(engine, config.cardGridRect,
         cardIndex % config.memoryGridColumns, Math.floor(cardIndex / config.memoryGridColumns),
         config.memoryGridColumns, config.memoryGridRows);
@@ -1266,7 +1266,8 @@ test('stage projections keep active players active and withhold answer keys', ()
     assert.equal(Object.hasOwn(view.currentRound, 'questionId'), false, `${gameId} never exposes internal question metadata on the public stage`);
     if (gameId === 'minesweeper') assert.equal(view.currentRound.question.mines, undefined);
     if (gameId === 'memory_poker') {
-      assert.equal(view.currentRound.question.community, null);
+      assert.equal(view.currentRound.question.community.length, 3);
+      assert.equal(view.currentRound.question.cards, null);
       assert.equal(player.hand, undefined);
     }
     if (gameId === 'memory_sequence') {
@@ -1355,7 +1356,7 @@ test('touch hit regions match the board, keypad, card and choice layouts', () =>
   }
 
   const poker = createEngine('memory_poker');
-  advance(poker, rules.games.memory_poker.memorySeconds * 1_000);
+  advance(poker, (rules.games.memory_poker.communityRevealSeconds + rules.games.memory_poker.memorySeconds) * 1_000);
   const cardPoint = pointAt(rules.games.memory_poker.cardGridRect, 0, 0, 4, 4);
   poker.coordinateAction('P1', cardPoint.u, cardPoint.v);
   assert.deepEqual(poker.state.currentRound.players.P1.selected, [0]);
@@ -1551,12 +1552,12 @@ test('lobby offers random selection and rejects conflicting choices from the sam
     return engine;
   };
   const optionTouch = (engine, index, id, phase = 'down') =>
-    menuTouchEvent(id, phase, 0.5, 0.6, zones.players[index].id, engine);
+    menuTouchEvent(id, phase, 0.5, 0.6, engine.menuZones[index].id, engine);
   const empty = new GameEngine({ rules, zones, onSave() {} });
   startReadySession(empty);
   empty.handleTouchFrame(touchFrame([optionTouch(empty, 0, 70)], [70]));
   assert.equal(empty.state.phase, 'lobby', 'the shared menu waits for at least one staff-added player');
-  assert.equal(empty.snapshot().menuZones.length, 8, 'all fixed wall menu surfaces remain available as one room-wide menu');
+  assert.equal(empty.snapshot().menuZones.length, 9, 'all fixed wall menu surfaces remain available as one room-wide menu');
 
   const fixedMenu = createLobby();
   for (const [index, zone] of fixedMenu.menuZones.entries()) {
@@ -1623,7 +1624,7 @@ test('lobby offers random selection and rejects conflicting choices from the sam
   assert.equal(noPlayerLobby.state.phase, 'game_preview');
 
   const random = createLobby();
-  random.handleTouchFrame(touchFrame([optionTouch(random, 7, 77)], [77]));
+  random.handleTouchFrame(touchFrame([optionTouch(random, 8, 77)], [77]));
   assert.equal(random.state.phase, 'game_preview');
   assert.ok(GAME_IDS.includes(random.state.selectedGame));
   assert.match(random.state.notice, /隨機抽中/);
@@ -1978,4 +1979,35 @@ test('8-by-6 minesweeper ignores the removed perimeter and toggles only at the u
   engine.coordinateAction('P1', (board.x + (index % q.cols + .5) * board.width / q.cols) / 640,
     (board.y + (Math.floor(index / q.cols) + .5) * board.height / q.rows) / 640);
   assert.deepEqual(player.flags, [index]);
+});
+
+
+test('poker reveals community before memory, gates selection, and preserves community cards', () => {
+  const engine = createEngine('memory_poker');
+  const view = () => createStageSnapshot(engine, engine.rules, zones).currentRound.question;
+  const config = rules.games.memory_poker;
+  const community = view().community;
+  assert.equal(view().stage, 'community');
+  assert.equal(view().cards, null);
+  engine.act('P1', { type: 'toggle_card', index: 0 });
+  assert.deepEqual(engine.state.currentRound.players.P1.selected, []);
+  advance(engine, config.communityRevealSeconds * 1000);
+  assert.equal(view().stage, 'memory');
+  assert.equal(view().cards.length, 16);
+  assert.deepEqual(view().community, community);
+  advance(engine, config.memorySeconds * 1000 - 1);
+  engine.act('P1', { type: 'toggle_card', index: 0 });
+  assert.deepEqual(engine.state.currentRound.players.P1.selected, []);
+  advance(engine, 1);
+  assert.equal(view().stage, 'selection');
+  assert.equal(view().cards, null);
+  assert.deepEqual(view().community, community);
+  engine.act('P1', { type: 'toggle_card', index: 0 });
+  engine.act('P1', { type: 'toggle_card', index: 1 });
+  advance(engine, config.selectionSeconds * 1000);
+  assert.equal(view().stage, 'reveal');
+  assert.equal(engine.state.currentRound.players.P1.locked, true);
+  advance(engine, config.revealCountdownSeconds * 1000);
+  assert.equal(engine.state.phase, 'round_results');
+  assert.equal(view().cards.length, 16);
 });

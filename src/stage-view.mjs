@@ -1,3 +1,5 @@
+import { pokerTiming, pokerStage } from '../public/poker-timing.mjs';
+
 /**
  * Build the public projection for the shared game display.
  * Keep answer keys and private player state inside the game engine until results.
@@ -84,11 +86,12 @@ export function createStageSnapshot(engine, rules, zones) {
     };
   } else if (gameId === 'memory_poker') {
     const config = rules.games.memory_poker;
-    const memoryPhase = engine.state.phase === 'playing' && elapsedMs < config.memorySeconds * 1000;
+    const memoryPhase = engine.state.phase === 'playing' && pokerStage(elapsedMs, config) === 'memory';
     publicQuestion = {
+      stage: pokerStage(elapsedMs, config),
       cardLocations: question.cardLocations,
       cards: (memoryPhase || resultPhase) ? question.cards.map((card) => card.label) : null,
-      community: (elapsedMs >= config.memorySeconds * 1000 || resultPhase) ? question.community.map((card) => card.label) : null
+      community: (config.communityCardsVisibleDuringMemory || elapsedMs >= pokerTiming(config).memoryEnd || resultPhase) ? question.community.map((card) => card.label) : null
     };
   } else if (gameId === 'map_view') {
     publicQuestion = {

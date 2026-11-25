@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { pokerTiming } from '../public/poker-timing.mjs';
 import { resolvePlayerLayout } from './player-layouts.mjs';
 import { cubeColumnsAreReadable } from './cube-visibility.mjs';
 import { validateGameRules } from './game-rules.mjs';
@@ -470,7 +471,7 @@ function compareKey(a, b) {
 function currentRoundLimit(gameId, question, rules) {
   const config = rules.games[gameId];
   if (gameId === 'memory_sequence') return question.memorySeconds * 1000 + config.answerSeconds * 1000;
-  if (gameId === 'memory_poker') return (config.memorySeconds + config.selectionSeconds + config.revealCountdownSeconds) * 1000;
+  if (gameId === 'memory_poker') return pokerTiming(config).revealEnd;
   return config.playSeconds * 1000;
 }
 
@@ -718,7 +719,7 @@ export class GameEngine {
     }
     this.configureRules(this.restoredRulesError ? this.configuredRules : activeRules);
     this.zoneConfig = zones;
-    this.menuZones = structuredClone(zones.players);
+    this.menuZones = structuredClone([...zones.players, ...(zones.menuExtraZones ?? [])]);
     this.knownPlayerIds = new Set(zones.players.map((player) => player.id));
     this.onChange = onChange;
     this.onSave = onSave;
@@ -1272,7 +1273,7 @@ export class GameEngine {
   pokerAction(player, action, actionAtMs) {
     const t = actionAtMs;
     const config = this.rules.games.memory_poker;
-    const selectStart = config.memorySeconds * 1000;
+    const selectStart = pokerTiming(config).memoryEnd;
     const selectEnd = selectStart + config.selectionSeconds * 1000;
     if (t < selectStart || t >= selectEnd || player.locked) return;
     if (action.type === 'toggle_card') {
@@ -1412,8 +1413,8 @@ export class GameEngine {
     }
     if (gameId === 'memory_poker') {
       const poker = this.rules.games.memory_poker;
-      if (roundElapsedMs < poker.memorySeconds * 1000 ||
-          roundElapsedMs >= (poker.memorySeconds + poker.selectionSeconds) * 1000) return;
+      if (roundElapsedMs < pokerTiming(poker).memoryEnd ||
+          roundElapsedMs >= pokerTiming(poker).selectionEnd) return;
       if (inside(poker.cardGridRect)) {
         const col = Math.floor((x - poker.cardGridRect.x) / poker.cardGridRect.width * poker.memoryGridColumns);
         const row = Math.floor((y - poker.cardGridRect.y) / poker.cardGridRect.height * poker.memoryGridRows);
@@ -1751,7 +1752,7 @@ export class GameEngine {
       const round = this.state.currentRound;
       round.elapsedMs = Math.min(round.limitMs, round.elapsedMs + d);
       const poker = this.rules.games.memory_poker;
-      if (round.gameId === 'memory_poker' && round.elapsedMs >= (poker.memorySeconds + poker.selectionSeconds) * 1000) {
+      if (round.gameId === 'memory_poker' && round.elapsedMs >= pokerTiming(poker).selectionEnd) {
         for (const player of Object.values(round.players)) if (player.selected.length === 2) player.locked = true;
       }
       if (round.elapsedMs >= round.limitMs) this.finishRound('deadline');

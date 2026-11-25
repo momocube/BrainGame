@@ -1,3 +1,4 @@
+import { pokerTiming, pokerStage } from './poker-timing.mjs';
 import { CAD_SCENE, PROJECTION_CANVAS, calculateProjectionFit } from './projection-layout.mjs';
 import { installMouseInput } from './mouse-input.mjs';
 import { EXIT_BUTTONS, canPlayerExit } from './exit-control.mjs';
@@ -5,6 +6,7 @@ import { TUTORIAL_BUTTON_DIAMETER } from './tutorial-control.mjs';
 
 import { renderPerspectiveSceneSvg } from './map-scene.mjs';
 import { slitherlinkBoardSvg } from './slitherlink-board.mjs';
+import { sharedTutorialWalls, illustratedTutorial } from './tutorial-presentation.mjs';
 import { getGameTutorial } from './tutorial-content.mjs';
 import { compareStageStateFreshness, scoreboardColumnCount, stageStructureKey } from './stage-rendering.mjs';
 
@@ -18,6 +20,7 @@ const gameNames = {
   solid_puzzle: '立體拼圖', memory_poker: '記憶撲克', map_view: '地圖定位', memory_sequence: '數字速記',
   slitherlink: '數迴'
 };
+const GAME_ICONS = { minesweeper: '01_minesweeper', zero_sum_grid: '02_zero_sum_grid', cube_count: '03_count_cubes', solid_puzzle: '04_spatial_puzzle', memory_poker: '05_memory_poker', map_view: '06_map_position', memory_sequence: '07_number_memory', slitherlink: '08_slitherlink' };
 let state;
 let lastRenderedStructureKey = null;
 const lastSequenceWrongCount = new Map();
@@ -69,10 +72,75 @@ function setTextIfChanged(node, value) {
 
 function sharedMenuTile(option, data, split) {
   const tile = el('div', `shared-game-tile${option.id === 'random' ? ' random-game' : ''}`);
+  const icons = GAME_ICONS;
+  if (icons[option.id]) {
+    const icon = el('img', 'shared-game-icon'); icon.src = `/icons/${icons[option.id]}.png`; icon.alt = ''; tile.append(icon);
+  }
   tile.append(el('strong', '', option.name));
   tile.append(el('small', '', option.id === 'random' ? '全體共同抽選一款遊戲' : `全體共同遊玩・${option.rounds} 輪`));
   tile.append(el('span', 'shared-game-prompt', data.phase === 'lobby' ? (split ? '觸碰此半邊選擇' : '觸碰此區域選擇') : '全場確認中'));
   return tile;
+}
+
+/** A single illustrated presentation spans each physical wall, independent of player count. */
+function renderSharedTutorialWall(wall, data) {
+  const node = el('section', 'tutorial-wall');
+  node.style.cssText = rectStyle(wall.rect);
+  node.dataset.wallId = wall.id;
+  const content = el('div', 'tutorial-wall-content');
+  const sideways = wall.rotationDegrees % 180 !== 0;
+  content.style.width = `${sideways ? wall.rect.height : wall.rect.width}px`;
+  content.style.height = `${sideways ? wall.rect.width : wall.rect.height}px`;
+  content.style.transform = `translate(-50%, -50%) rotate(${wall.rotationDegrees}deg)`;
+  const header = el('div', 'tutorial-wall-header');
+  const icon = el('img', 'tutorial-wall-icon'); icon.src = `/icons/${GAME_ICONS[data.selectedGame]}.png`; icon.alt = '';
+  header.append(icon, el('strong', '', gameNames[data.selectedGame]), el('span', '', '一起看示範'));
+  const story = illustratedTutorial(data.selectedGame);
+  const demo = el('div', 'tutorial-demo');
+  const frames = el('div', 'tutorial-frames');
+  const steps = el('ol', 'tutorial-visual-steps');
+  story.frames.forEach((frame, index) => {
+    const slide = el('div', 'tutorial-frame');
+    slide.style.setProperty('--slide-delay', `${index === 0 ? 0 : (index - 3) * 3}s`);
+    slide.setAttribute('aria-label', frame.label);
+    if (frame.svg) slide.innerHTML = frame.svg;
+    else slide.append(renderTutorialSolid(data.selectedGame, index));
+    frames.append(slide);
+    const step = el('li', 'tutorial-visual-step');
+    step.style.setProperty('--slide-delay', `${index === 0 ? 0 : (index - 3) * 3}s`);
+    step.append(el('span', 'tutorial-step-number', String(index + 1)), el('span', '', frame.label));
+    steps.append(step);
+  });
+  demo.append(frames, steps);
+  content.append(header, demo, el('div', 'tutorial-wall-footer', '看完示範後，任一玩家長按地板中央開始'));
+  node.append(content);
+  return node;
+}
+function renderTutorialSolid(gameId, step) {
+  const box = el('div', 'tutorial-solid-demo');
+  if (gameId === 'cube_count') {
+    box.append(createIsometricSvg([[0,0,0],[1,0,0],[0,0,1]], {
+      viewWidth: 640, viewHeight: 320, margin: 25, label: '兩個底層方塊加一個上層方塊'
+    }));
+    box.append(el('div', step === 2 ? 'tutorial-demo-confirm' : 'tutorial-demo-caption',
+      ['上下層都要數', '底層 2 ＋ 上層 1 ＝ 3', '輸入 3 → 確定'][step]));
+  } else {
+    const missing = [[0,0,1],[1,0,1],[0,1,1],[0,0,2]];
+    if (step === 0) {
+      const solid = [];
+      for (let z=0;z<3;z++) for(let y=0;y<2;y++) for(let x=0;x<2;x++) {
+        if (!missing.some(c=>c[0]===x&&c[1]===y&&c[2]===z)) solid.push([x,y,z]);
+      }
+      box.append(createIsometricSvg(solid, { bounds:[2,2,3], wireframeVoxels:missing, outlineBounds:true,
+        palette:{top:'#b4e9ff',sideX:'#368cfa',sideY:'#174bad',edge:'#07162f'},
+        viewWidth:640,viewHeight:320,margin:25,label:'藍色方塊與黃色待補缺口' }));
+    } else box.append(createIsometricSvg(missing.map(([x,y,z])=>[x,y,z-1]), {
+      viewWidth:640,viewHeight:320,margin:25,label:'可填入缺口的四格零件'
+    }));
+    box.append(el('div', step === 2 ? 'tutorial-demo-confirm' : 'tutorial-demo-caption',
+      ['黃色實線是缺口', '找出相同形狀的零件', '選取零件 → 確定'][step]));
+  }
+  return box;
 }
 
 /** One wall of the shared lobby menu; the last wall may hold several options side by side. */
@@ -123,7 +191,7 @@ function renderZone(zone, view, data) {
   const body = el('div', 'zone-body');
   content.append(header, body); inner.append(content); node.append(inner);
   const panel = view?.[zone.id];
-  header.append(el('div', 'zone-name', `${zone.id}・${zone.name}`));
+
   if (!panel?.joined) {
     body.classList.add('zone-body-centered');
     body.append(el('div', 'join-prompt', '等待工作人員加入'), el('div', 'subprompt', '加入後依 P 編號前往對應答題區'));
@@ -152,7 +220,7 @@ function renderZone(zone, view, data) {
   if (data.phase === 'countdown') {
     const number = Math.max(1, Math.ceil((data.currentRound?.countdownMs ?? 0) / 1000));
     header.append(el('div', 'zone-head', `${gameNames[data.currentRound?.gameId] ?? '遊戲'}・第 ${data.currentRound?.round ?? ''} 輪`));
-    body.classList.add('zone-body-centered'); body.append(el('div', 'floor-title', String(number))); return node;
+    body.classList.add('zone-body-centered'); body.append(el('div', 'floor-title game-countdown', String(number))); return node;
   }
   if (data.phase === 'round_results') {
     renderZoneResult(header, body, panel, data); return node;
@@ -180,7 +248,7 @@ function renderZone(zone, view, data) {
     header.append(el('div', `zone-detail${numericEntryEnabled ? ' numeric-lock-detail' : ''}`,
       numericEntryEnabled ? lockText : `目前輸入：${panel.entry || '—'}${lockText ? `　${lockText}` : ''}`));
   } else if (round.gameId === 'memory_poker') {
-    header.append(el('div', 'zone-detail', `已選 ${panel.selected?.length ?? 0} / 2　${panel.locked ? '已確認' : '確認後不可修改'}`));
+    header.append(el('div', 'zone-detail poker-selection-detail', `已選 ${panel.selected?.length ?? 0} / 2`));
   } else if (round.gameId === 'memory_sequence') {
     header.append(el('div', 'zone-detail', round.elapsedMs < (q.memorySeconds ?? 0) * 1000
       ? '記憶數字位置' : `下一個：${(panel.sequence?.progress ?? 0) + 1}　最佳：${panel.sequence?.bestProgress ?? 0}`));
@@ -202,7 +270,7 @@ function renderZone(zone, view, data) {
   }
   if (round.gameId === 'minesweeper') renderMineZone(body, panel.mine, q, gameConfig, data.gameRules.common.layout);
   else if (round.gameId === 'zero_sum_grid' || round.gameId === 'cube_count') renderKeypad(body, data.gameRules?.common?.layout, panel.entry, panel.lockRemainingMs);
-  else if (round.gameId === 'solid_puzzle') renderChoices(body, q.choices ?? [], panel.selection, 'piece', panel.choiceOrder);
+  else if (round.gameId === 'solid_puzzle') renderChoices(body, q.choices ?? [], panel.selection, 'piece', panel.choiceOrder, gameConfig);
   else if (round.gameId === 'map_view') renderMapPlayer(body, q, panel.selection, gameConfig);
   else if (round.gameId === 'memory_poker') renderPokerZone(body, panel, q, round.elapsedMs, gameConfig);
   else if (round.gameId === 'memory_sequence') renderSequenceZone(body, panel.sequence, round, false, flashSequenceError);
@@ -289,7 +357,7 @@ function renderKeypad(body, layout = {}, entry = '', lockRemainingMs = 0) {
   body.append(pad);
 }
 
-function renderChoices(body, choices, selection, kind, choiceOrder = null) {
+function renderChoices(body, choices, selection, kind, choiceOrder = null, config = {}) {
   const grid = el('div', 'choice-grid');
   const choicesById = new Map(choices.map((item) => [item.id, item]));
   const orderedChoices = choiceOrder?.length === choices.length
@@ -301,7 +369,13 @@ function renderChoices(body, choices, selection, kind, choiceOrder = null) {
     else tile.append(renderShapeCells(item.cells ?? []));
     grid.append(tile);
   }
-  body.append(grid, el('div', 'ready-button confirm-button', '選擇後按確認'));
+  body.classList.add('puzzle-choice-body');
+  const confirm = el('div', 'ready-button confirm-button puzzle-confirm');
+  confirm.append(el('span', 'choice-selection-count', `已選 ${selection ? 1 : 0} / 1`), el('span', '', '確定'));
+  for (const [node, rect] of [[grid, config.choiceGridRect], [confirm, config.confirmRect]]) {
+    if (rect) node.style.cssText = `position:absolute;left:${rect.x}px;top:${rect.y - 128}px;width:${rect.width}px;height:${rect.height}px`;
+  }
+  body.append(grid, confirm);
 }
 
 function renderMapPlayer(body, q = {}, selection = null, config = {}) {
@@ -338,10 +412,16 @@ function renderShapeCells(cells) {
 }
 
 function renderPokerZone(body, panel, q, elapsedMs, config) {
-  const memoryEnd = config.memorySeconds * 1000;
-  const selectionEnd = memoryEnd + config.selectionSeconds * 1000;
-  const memory = elapsedMs < memoryEnd;
+  body.classList.add('poker-body');
+  const { communityEnd, memoryEnd, selectionEnd } = pokerTiming(config);
+  const stage = pokerStage(elapsedMs, config);
+  if (stage === 'community') {
+    body.append(el('div', 'poker-preview-message', '先看公共牌'), el('div', 'compact-info', '接著記憶 16 張牌的位置'));
+    return;
+  }
+  const memory = stage === 'memory';
   const grid = el('div', 'memory-grid poker-grid');
+  grid.style.cssText = `position:absolute;left:${config.cardGridRect.x}px;top:${config.cardGridRect.y - 128}px;width:${config.cardGridRect.width}px;height:${config.cardGridRect.height}px`;
   const cards = q.cards;
   for (let i = 0; i < 16; i++) {
     const selected = panel.selected?.includes(i);
@@ -350,8 +430,15 @@ function renderPokerZone(body, panel, q, elapsedMs, config) {
     if (memory && /[♦♥]/.test(label ?? '')) card.classList.add('red');
     grid.append(card);
   }
-  body.append(grid, el('div', 'compact-info poker-info', memory ? '記憶牌面與位置' : `已選 ${panel.selected?.length ?? 0} / 2`));
-  if (!memory && elapsedMs < selectionEnd) body.append(el('div', 'ready-button confirm-button poker-confirm', panel.locked ? '已確認' : '選滿兩張後按確認'));
+  const info = el('div', `compact-info poker-info${memory ? '' : ' selection-count'}`, memory ? '記憶牌面與位置' : `已選 ${panel.selected?.length ?? 0} / 2`);
+  info.style.cssText = `position:absolute;left:${config.selectionInfoRect.x}px;top:${config.selectionInfoRect.y - 128}px;width:${config.selectionInfoRect.width}px;height:${config.selectionInfoRect.height}px`;
+  body.append(grid, info);
+  if (!memory && elapsedMs < selectionEnd) {
+    const confirm = el('div', 'ready-button confirm-button poker-confirm', panel.locked ? '已確認' : '選滿兩張後按確認');
+    const rect = config.confirmRect;
+    confirm.style.cssText = `position:absolute;left:${rect.x}px;top:${rect.y - 128}px;width:${rect.width}px;height:${rect.height}px`;
+    body.append(confirm);
+  }
 }
 
 function renderSequenceZone(body, sequence = {}, round, forceReveal = false, flashWrong = false) {
@@ -408,9 +495,9 @@ function renderZoneResult(header, body, panel, data) {
 }
 
 function pokerPhase(elapsedMs, config) {
-  const memoryEnd = config.memorySeconds * 1000;
-  const selectionEnd = memoryEnd + config.selectionSeconds * 1000;
+  const { communityEnd, memoryEnd, selectionEnd } = pokerTiming(config);
   const revealEnd = selectionEnd + config.revealCountdownSeconds * 1000;
+  if (elapsedMs < communityEnd) return `公共牌 ${secondsLeft(communityEnd - elapsedMs)}`;
   if (elapsedMs < memoryEnd) return `記憶 ${secondsLeft(memoryEnd - elapsedMs)}`;
   if (elapsedMs < selectionEnd) return `選牌 ${secondsLeft(selectionEnd - elapsedMs)}`;
   if (elapsedMs < revealEnd) return `揭曉 ${secondsLeft(revealEnd - elapsedMs)}`;
@@ -444,10 +531,9 @@ function renderFloor(data) {
     return;
   }
   if (data.phase === 'tutorial' && data.selectedGame) {
-    const guide = getGameTutorial(data.selectedGame, data.gameRules?.games?.[data.selectedGame] ?? {});
     const box = el('div', 'shared-floor-screen shared-tutorial-floor');
     box.append(el('div', 'floor-title', '教學完成・全體共用'));
-    box.append(el('div', 'shared-floor-description', `讀完周圍牆面的操作說明後，任一玩家可在地板中央長踩完成。${guide.schedule}`));
+    box.append(el('div', 'shared-floor-description', '看完牆面示範後，任一玩家長按中央開始'));
     const controls = el('div', 'shared-floor-controls shared-tutorial-controls');
     controls.style.width = `${TUTORIAL_BUTTON_DIAMETER}px`;
     controls.style.height = `${TUTORIAL_BUTTON_DIAMETER}px`;
@@ -462,6 +548,11 @@ function renderFloor(data) {
     box.append(controls);
     floor.append(box);
     return;
+  }
+  if (data.phase === 'countdown') return renderCountdown(data, floor);
+  if (data.currentRound?.gameId === 'slitherlink') {
+    if (data.phase === 'playing') return renderPlayerProgress(data, floor);
+    if (data.phase === 'round_results') return renderRoundStandings(data, floor);
   }
   if (data.layout?.questionDisplayMode !== 'player-panels') {
     renderQuestionDisplay(data, floor);
@@ -510,7 +601,7 @@ function renderQuestionDisplay(data, target) {
     return showTitle(gameNames[data.selectedGame] ?? '遊戲教學', `${guide.goal}　${guide.schedule}`, target);
   }
   if (data.phase === 'paused' || data.phase === 'resume_countdown') return showTitle(data.phase === 'paused' ? '遊戲暫停' : '即將繼續', data.notice ?? '', target);
-  if (data.phase === 'countdown') return showTitle(String(Math.max(1, Math.ceil((data.currentRound?.countdownMs ?? 0) / 1000))), `${gameNames[data.currentRound?.gameId] ?? ''}・第 ${data.currentRound?.round ?? ''} 輪`, target);
+  if (data.phase === 'countdown') return renderCountdown(data, target);
   if (data.phase === 'round_results') return renderRoundResult(data, target);
   if (data.phase === 'final_results') return renderFinalResult(data, target);
   if (data.phase !== 'playing' || !data.currentRound) return showTitle('704 腦力競賽', data.notice ?? '', target);
@@ -525,6 +616,16 @@ function renderQuestionDisplay(data, target) {
   else if (round.gameId === 'slitherlink') target.append(renderSlitherlinkFloor(round.question));
 }
 
+function renderCountdown(data, target) {
+  const box = el('div', 'floor-stack');
+  box.append(el('div', 'floor-title game-countdown', String(Math.max(1, Math.ceil((data.currentRound?.countdownMs ?? 0) / 1000)))), el('div', 'floor-subtitle', `${gameNames[data.currentRound?.gameId] ?? ''}・第 ${data.currentRound?.round ?? ''} 輪`));
+  target.append(box);
+}
+function roundTimer(data) {
+  const round = data.currentRound, config = data.gameRules?.games?.[round.gameId] ?? {};
+  return round.gameId === 'memory_poker' ? pokerPhase(round.elapsedMs, config)
+    : round.gameId === 'memory_sequence' ? sequencePhase(round, config) : secondsLeft(round.limitMs - round.elapsedMs);
+}
 function showTitle(title, subtitle, target = floor) {
   const box = el('div', 'floor-stack'); box.append(el('div', 'floor-title', title), el('div', 'floor-subtitle', subtitle)); target.append(box);
 }
@@ -749,21 +850,28 @@ function createIsometricSvg(cells, options = {}) {
 }
 function renderPuzzleFloor(q = {}, answer = null) {
   const wrap = el('div', 'floor-stack');
-  wrap.append(el('div', 'floor-title', answer ? `正確零件：${answer.correctId}` : '選出能補滿缺口的零件'), el('div', 'floor-subtitle', `目標外框 ${q.target?.join(' × ') ?? ''}　缺口 ${q.missing?.length ?? 0} 個方塊`));
+  if (answer) {
+    const choice = q.choices?.find((item) => item.id === answer.correctId);
+    wrap.classList.add('puzzle-answer-piece');
+    wrap.append(el('div', 'floor-title', `正確零件：${answer.correctId}`));
+    if (choice) { const shape = renderShapeCells(choice.cells); shape.classList.add('puzzle-answer-svg'); shape.dataset.choiceId = choice.id; wrap.append(shape); }
+    return wrap;
+  }
+  wrap.append(el('div', 'floor-title', '選出能補滿缺口的零件'), el('div', 'floor-subtitle', `目標外框 ${q.target?.join(' × ') ?? ''}　缺口 ${q.missing?.length ?? 0} 個方塊`));
   const target = q.target ?? [3, 3, 2], missing = q.missing ?? [];
   const missingSet = new Set(missing.map((cell) => cell.join(',')));
   const solid = [];
   for (let z = 0; z < target[2]; z++) for (let y = 0; y < target[1]; y++) for (let x = 0; x < target[0]; x++) {
-    if (answer || !missingSet.has(`${x},${y},${z}`)) solid.push([x, y, z]);
+    if (!missingSet.has(`${x},${y},${z}`)) solid.push([x, y, z]);
   }
   wrap.append(createIsometricSvg(solid, {
     azimuthDegrees: 45, elevationDegrees: 35, bounds: target,
-    wireframeVoxels: answer ? [] : missing, outlineBounds: true,
+    wireframeVoxels: missing, outlineBounds: true,
     palette: { top: '#b4e9ff', sideX: '#368cfa', sideY: '#174bad', edge: '#07162f' }, edgeWidth: '1.4',
     viewWidth: 640, viewHeight: 420, margin: 28, className: 'puzzle-target-svg',
     label: '立體外框與待補缺口'
   }));
-  wrap.append(el('div', 'puzzle-legend', answer ? '藍色：完整立體' : '藍色：已有方塊　黃色實線：待補缺口'));
+  wrap.append(el('div', 'puzzle-legend', '藍色：已有方塊　黃色實線：待補缺口'));
   return wrap;
 }
 function renderPokerFloor(round) {
@@ -790,7 +898,7 @@ function renderPokerFloor(round) {
       card.append(svg); row.append(card);
     }
     wrap.append(row);
-  } else wrap.append(el('div', 'floor-subtitle', '公共牌將於選牌階段公開'));
+  } else wrap.append(el('div', 'floor-subtitle', '公共牌即將公開'));
   return wrap;
 }
 function renderMapFloor(q = {}, answer = null) {
@@ -941,6 +1049,8 @@ function render(data) {
       position += zoneOptions.length;
       if (node) zones.append(node);
     }
+  } else if (data.phase === 'tutorial') {
+    for (const wall of sharedTutorialWalls(data.menuZones ?? [])) zones.append(renderSharedTutorialWall(wall, data));
   } else {
     for (const panel of data.questionPanels ?? []) zones.append(renderQuestionPanel(panel, data));
     for (const zone of data.zones ?? []) zones.append(renderZone(zone, views, data));
@@ -949,6 +1059,9 @@ function render(data) {
   const exitControl = renderExitControl(data);
   if (exitControl) zones.append(exitControl);
   renderFloor(data);
+  if (data.phase === 'playing' && data.currentRound) {
+    for (const target of [floor, ...document.querySelectorAll('.question-content')]) target.append(el('div', 'round-timer', roundTimer(data)));
+  }
   const overlay = $('#overlay');
   if (data.phase === 'paused' || data.phase === 'resume_countdown') {
     overlay.hidden = false; const card = el('div', 'overlay-card', data.phase === 'paused' ? '暫停中' : '準備繼續');
@@ -964,6 +1077,7 @@ function updateVolatileStageText(data) {
     const config = data.gameRules?.games?.[round.gameId] ?? {};
     const timer = round.gameId === 'memory_poker' ? pokerPhase(round.elapsedMs, config)
       : round.gameId === 'memory_sequence' ? sequencePhase(round, config) : secondsLeft(round.limitMs - round.elapsedMs);
+    for (const node of document.querySelectorAll('.round-timer')) setTextIfChanged(node, timer);
     for (const zone of $('#zones').querySelectorAll('.zone')) {
       const panel = data.playerViews?.[zone.dataset.zoneId];
       if (!panel?.joined) continue;
@@ -982,9 +1096,7 @@ function updateVolatileStageText(data) {
 
   if (data.phase === 'countdown') {
     const number = String(Math.max(1, Math.ceil((data.currentRound?.countdownMs ?? 0) / 1000)));
-    for (const node of $('#zones').querySelectorAll('.zone-body .floor-title')) setTextIfChanged(node, number);
-    for (const node of $('#zones').querySelectorAll('.question-content .floor-stack > .floor-title:first-child')) setTextIfChanged(node, number);
-    setTextIfChanged(floor.querySelector(':scope > .floor-title'), number);
+    for (const node of document.querySelectorAll('.game-countdown')) setTextIfChanged(node, number);
   } else if (data.phase === 'resume_countdown') {
     setTextIfChanged($('#overlay .overlay-card small'), secondsLeft(data.countdownMs ?? 0));
   }

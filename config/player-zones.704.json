@@ -13,6 +13,7 @@
       "rect": { "x": 896, "y": 2048, "width": 512, "height": 640 }
     }
   ],
+  "menuExtraZones": [{"id": "random-menu", "name": "隨機遊戲選單", "rotationDegrees": 180, "rect": {"x": 1408, "y": 2048, "width": 640, "height": 640}, "sources": [{"face": 4, "x": 1408, "y": 2048, "width": 640, "height": 640}]}],
   "players": [
     {
       "id": "P1", "name": "對面長牆玩家 A", "rotationDegrees": 0,

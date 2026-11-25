@@ -40,11 +40,11 @@ const tutorials = {
   memory_poker: (config) => ({
     goal: `記住 ${number(config, "memoryCards", 16)} 張牌的位置，再與 ${number(config, "communityCards", 3)} 張公共牌組成五張牌型。`,
     steps: [
-      `先記憶 ${number(config, "memorySeconds", 20)} 秒；蓋牌後才公開公共牌並開始選牌。`,
+      `先公開三張公共牌 ${number(config, "communityRevealSeconds", 0)} 秒，再記憶 16 張牌 ${number(config, "memorySeconds", 20)} 秒；蓋牌後選牌，公共牌持續顯示。`,
       `選 ${number(config, "selectedCardsRequired", 2)} 個不同位置後按確認鎖定；不同玩家可以選同一張。`,
       "選滿者到時自動提交；少選者得 0 分。依牌型比大小，不比花色或選牌速度。"
     ],
-    schedule: `記憶 ${number(config, "memorySeconds", 20)} 秒・選牌 ${number(config, "selectionSeconds", 10)} 秒・揭曉 ${number(config, "revealCountdownSeconds", 3)} 秒・共 ${number(config, "rounds", 5)} 輪`
+    schedule: `公共牌 ${number(config, "communityRevealSeconds", 0)} 秒・記憶 ${number(config, "memorySeconds", 20)} 秒・選牌 ${number(config, "selectionSeconds", 10)} 秒・揭曉 ${number(config, "revealCountdownSeconds", 3)} 秒・共 ${number(config, "rounds", 5)} 輪`
   }),
   map_view: (config) => ({
     goal: "對照地板第一人稱景象與牆面平面圖，找出拍攝者的位置和面向。",

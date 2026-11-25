@@ -1,5 +1,5 @@
 {
-  "rulesVersion": "1.0.14",
+  "rulesVersion": "1.0.15",
   "status": "prototype_in_progress",
   "updatedAt": "2026-11-25",
   "common": {
@@ -244,13 +244,13 @@
       "optionCount": 6,
       "choiceGridRect": {
         "x": 0,
-        "y": 128,
+        "y": 192,
         "width": 640,
         "height": 448
       },
       "confirmRect": {
         "x": 0,
-        "y": 576,
+        "y": 128,
         "width": 640,
         "height": 64
       },
@@ -314,24 +314,24 @@
       "selectionSeconds": 10,
       "revealCountdownSeconds": 3,
       "communityCards": 3,
-      "communityCardsVisibleDuringMemory": false,
+      "communityCardsVisibleDuringMemory": true,
       "selectedCardsRequired": 2,
       "uniqueCardsAcrossMemoryAndCommunity": true,
       "cardGridRect": {
         "x": 0,
-        "y": 128,
+        "y": 192,
         "width": 640,
-        "height": 384
+        "height": 352
       },
       "selectionInfoRect": {
         "x": 0,
-        "y": 512,
+        "y": 544,
         "width": 640,
-        "height": 64
+        "height": 96
       },
       "confirmRect": {
         "x": 0,
-        "y": 576,
+        "y": 128,
         "width": 640,
         "height": 64
       },
@@ -347,7 +347,8 @@
       "suitsBreakTies": false,
       "selectionSpeedBreaksTies": false,
       "aceLowStraightAllowed": true,
-      "wrapAroundStraightAllowed": false
+      "wrapAroundStraightAllowed": false,
+      "communityRevealSeconds": 3
     },
     "map_view": {
       "displayName": "2D／3D 地圖定位",
@@ -471,10 +472,10 @@
       "boardColumns": 5,
       "boardRows": 5,
       "boardRect": {
-        "x": 80,
-        "y": 144,
-        "width": 480,
-        "height": 480
+        "x": 152,
+        "y": 216,
+        "width": 336,
+        "height": 336
       },
       "tapCycle": "line_cross_blank",
       "completion": "lines_match_unique_solution",

@@ -34,7 +34,7 @@ test("numeric and choice-game tutorials reflect editable penalties and round len
 
 test("special-game tutorials preserve poker phases and memory-sequence reset rules", () => {
   const poker = getGameTutorial("memory_poker", rules.games.memory_poker);
-  assert.match(poker.steps[0], /記憶 20 秒/);
+  assert.match(poker.steps[0], /記憶 16 張牌 20 秒/);
   assert.match(poker.schedule, /選牌 10 秒/);
   assert.match(poker.schedule, /揭曉 3 秒/);
 
@@ -47,4 +47,33 @@ test("special-game tutorials preserve poker phases and memory-sequence reset rul
 
 test("unknown games cannot silently fall back to a generic tutorial", () => {
   assert.throws(() => getGameTutorial("unknown_game"), /沒有設定遊戲教學/);
+});
+
+import { sharedTutorialWalls, illustratedTutorial } from '../public/tutorial-presentation.mjs';
+
+test('shared tutorials group eight player areas and the random menu into four safe walls', () => {
+  const zones = JSON.parse(fs.readFileSync(path.join(root, 'config/player-zones.704.json'), 'utf8'));
+  const walls = sharedTutorialWalls([...zones.players, ...zones.menuExtraZones]);
+  assert.equal(walls.length, 4);
+  assert.deepEqual(walls.map(w=>w.rotationDegrees).sort((a,b)=>a-b), [0,90,180,270]);
+  const overlap = (a,b) => a.x < b.x+b.width && a.x+a.width > b.x && a.y < b.y+b.height && a.y+a.height > b.y;
+  for (const wall of walls) {
+    const sideways = wall.rotationDegrees % 180 !== 0;
+    assert.ok((sideways ? wall.rect.height : wall.rect.width) >= 1280);
+    assert.equal(sideways ? wall.rect.width : wall.rect.height, 640);
+    for (const reserved of [...zones.reservedRects, zones.sharedExitControl]) assert.equal(overlap(wall.rect,reserved.rect),false);
+  }
+  for(const zone of [...zones.players,...zones.menuExtraZones]) {
+    assert.equal(walls.filter(w => w.rotationDegrees===zone.rotationDegrees && overlap(w.rect,zone.rect)).length,1);
+  }
+});
+
+test('all eight games have three concise illustrated tutorial steps', () => {
+  for(const id of Object.keys(rules.games)) {
+    const story=illustratedTutorial(id);
+    assert.equal(story.frames.length,3);
+    assert.ok(story.steps.every(s=>s.length<=16));
+    if(!['cube_count','solid_puzzle'].includes(id)) assert.ok(story.frames.every(f=>f.svg.includes('<svg') && f.svg.includes('</svg>')));
+  }
+  assert.throws(()=>illustratedTutorial('unknown_game'), /沒有圖解教學/);
 });

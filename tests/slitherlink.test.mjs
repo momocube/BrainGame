@@ -223,22 +223,23 @@ test('the projection gets clues and each player board, but the loop only after t
   assert.equal(results.results[0].rows.every((row) => row.score === 0), true, 'nobody finished: everyone scores 0');
 });
 
-test('the shared lobby splits the last wall between 數迴 and random selection', () => {
+test('the shared lobby gives 數迴 and random separate full-size walls', () => {
   const engine = new GameEngine({ rules, zones, onSave() {} });
   engine.setInputStatus(true, '測試 TouchService 已就緒');
   engine.startSession();
   engine.join('P1');
   const slots = engine.snapshot().menuSlots;
-  assert.equal(slots.length, 8);
+  assert.equal(slots.length, 9);
   assert.deepEqual(slots.slice(0, 7).map((slot) => slot.optionIds.length), [1, 1, 1, 1, 1, 1, 1]);
-  assert.deepEqual(slots[7].optionIds, ['slitherlink', 'random']);
+  assert.deepEqual(slots[7].optionIds, ['slitherlink']);
+  assert.deepEqual(slots[8].optionIds, ['random']);
   const lastWall = slots[7].zoneId;
   assert.equal(engine.lobbyGameAt(lastWall, 0.25, 0.6), 'slitherlink');
-  assert.equal(engine.lobbyGameAt(lastWall, 0.75, 0.6), 'random');
+  assert.equal(engine.lobbyGameAt(lastWall, 0.75, 0.6), 'slitherlink');
   assert.equal(engine.lobbyGameAt(lastWall, 0.25, 0.1), null, 'status rows are not a menu button');
 
   tapMenuWall(engine, lastWall, 0.25, 0.6, 501);
-  assert.equal(engine.state.phase, 'game_preview', 'touching the left half of the last wall picks 數迴');
+  assert.equal(engine.state.phase, 'game_preview', 'touching the full eighth wall picks 數迴');
   assert.equal(engine.state.selectedGame, 'slitherlink');
   assert.equal(engine.gamePreviewActionAt(slots[0].zoneId, 0.25, 0.6), null, 'other walls do not confirm');
   tapMenuWall(engine, lastWall, 0.25, 0.6, 502);
@@ -248,8 +249,8 @@ test('the shared lobby splits the last wall between 數迴 and random selection'
   random.setInputStatus(true, '測試 TouchService 已就緒');
   random.startSession();
   random.join('P1');
-  tapMenuWall(random, lastWall, 0.75, 0.6, 503);
-  assert.equal(random.state.phase, 'game_preview', 'the right half still offers random selection');
+  tapMenuWall(random, slots[8].zoneId, 0.5, 0.6, 503);
+  assert.equal(random.state.phase, 'game_preview', 'the independent right wall offers random selection');
   assert.match(random.state.notice, /隨機抽中/);
 
   const withoutSlitherlink = structuredClone(rules);
@@ -296,4 +297,14 @@ test('the 數迴 tutorial explains the three-tap cycle and uses the configured t
   const guide = getGameTutorial('slitherlink', config);
   assert.match(guide.steps[0], /第一下畫線.*第二下打叉.*第三下清除/);
   assert.equal(guide.schedule, '每輪 180 秒・共 3 輪');
+});
+
+test('the smaller player board preserves its centre and rejects touches on the old perimeter', () => {
+  assert.equal(config.boardRect.width / 480, 0.7);
+  assert.equal(config.boardRect.height / 480, 0.7);
+  assert.equal(config.boardRect.x + config.boardRect.width / 2, 320);
+  assert.equal(config.boardRect.y + config.boardRect.height / 2, 384);
+  for(const [x,y] of [[128,144],[80,192],[560,192],[128,624]]) {
+    assert.equal(slitherlinkEdgeAt(x,y,config.boardRect,5,5),null);
+  }
 });

@@ -357,6 +357,7 @@ function validateGameStructure(gameId, config) {
     if (rect.y < 128) throw new Error('數迴棋盤不可進入第 9、10 排狀態區');
   }
   if (gameId === 'memory_poker') {
+    if (config.communityRevealSeconds !== undefined) assertInteger(config.communityRevealSeconds, 'memory_poker.communityRevealSeconds', 0, 60);
     if (config.deckSize !== 52 || config.jokers !== 0 || config.selectedCardsRequired !== 2) {
       throw new Error('記憶撲克需使用 52 張標準牌、無鬼牌並選取兩張');
     }
