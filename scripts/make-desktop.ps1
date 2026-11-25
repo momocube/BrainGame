@@ -78,16 +78,25 @@ try {
   finally { Pop-Location }
 
   $destinationOut = Join-Path $projectRoot 'out'
-  $outputSlot = $env:BRAIN_GAME_OUTPUT_SLOT
-  if ($outputSlot) {
-    if ($outputSlot -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$') {
-      throw 'BRAIN_GAME_OUTPUT_SLOT 只能是 out 底下的單一英數、連字號或底線名稱。'
+  # New release numbering starts at 5; existing dated release folders carry it forward.
+  $releaseDate = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow, 'Taipei Standard Time').ToString('yyyy-MM-dd')
+  $lastReleaseNumber = 4
+  if (Test-Path -LiteralPath $destinationOut) {
+    foreach ($folder in (Get-ChildItem -LiteralPath $destinationOut -Directory)) {
+      if ($folder.Name -match '-\d{4}-\d{2}-\d{2}-(\d+)$') {
+        $lastReleaseNumber = [Math]::Max($lastReleaseNumber, [int]$Matches[1])
+      }
     }
-    $outputRoot = Join-Path $destinationOut $outputSlot
   }
-  else {
-    $outputRoot = $destinationOut
+  $releaseSuffix = "-$releaseDate-$($lastReleaseNumber + 1)"
+  $outputSlot = $env:BRAIN_GAME_OUTPUT_SLOT
+  if (-not $outputSlot) { $outputSlot = 'recovery-candidate' }
+  if ($outputSlot -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$') {
+    throw 'BRAIN_GAME_OUTPUT_SLOT 只能是英數、連字號或底線的名稱前綴。日期與版次會自動附加。'
   }
+  $outputSlot = $outputSlot -replace '-\d{4}-\d{2}-\d{2}-\d+$', ''
+  $outputRoot = Join-Path $destinationOut ($outputSlot + $releaseSuffix)
+  $portableFolderName = '704 腦力競賽-win32-x64' + $releaseSuffix
   $resolvedOutputRoot = [IO.Path]::GetFullPath($outputRoot)
   $resolvedOutRoot = [IO.Path]::GetFullPath($destinationOut).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
   if (-not $resolvedOutputRoot.StartsWith($resolvedOutRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -and
@@ -100,7 +109,7 @@ try {
     if (-not (Test-Path -LiteralPath $source)) { throw "建置產物不存在：$source" }
   }
 
-  $destinations = @('704 腦力競賽-win32-x64', 'make') | ForEach-Object { Join-Path $outputRoot $_ }
+  $destinations = @($portableFolderName, 'make') | ForEach-Object { Join-Path $outputRoot $_ }
   $runningExecutables = @(Get-CimInstance -ClassName Win32_Process -Filter "Name = '704-Brain-Game.exe' OR Name = 'TouchService.exe'" -ErrorAction Stop)
   $lockedTargets = foreach ($destination in $destinations) {
     $resolvedDestination = [IO.Path]::GetFullPath($destination).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
@@ -119,11 +128,12 @@ try {
     throw "目標輸出仍有程式執行，未刪除或覆寫任何輸出。請先正常關閉後重試：$details"
   }
 
-  New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
+  # Refuse to overwrite any existing release (including concurrent builds).
+  New-Item -ItemType Directory -Path $outputRoot -ErrorAction Stop | Out-Null
   foreach ($name in @('704 腦力競賽-win32-x64', 'make')) {
-    $destination = Join-Path $outputRoot $name
-    if (Test-Path -LiteralPath $destination) { Remove-Item -LiteralPath $destination -Recurse -Force }
-    Copy-Item -LiteralPath (Join-Path (Join-Path $buildRoot 'out') $name) -Destination $outputRoot -Recurse
+    $destinationName = if ($name -eq '704 腦力競賽-win32-x64') { $portableFolderName } else { $name }
+    $destination = Join-Path $outputRoot $destinationName
+    Copy-Item -LiteralPath (Join-Path (Join-Path $buildRoot 'out') $name) -Destination $destination -Recurse
   }
   Write-Host "Windows 發行包已建置並驗證：$outputRoot"
 }

@@ -12,6 +12,8 @@
 
 Windows x64 最新候選包位於 `out/recovery-candidate-20261125-sequence-results01/`。可攜資料夾內的 `704-Brain-Game.exe` 必須連同整個資料夾使用；候選 EXE 和實體 TouchService 依先前指示不啟動。雙螢幕及 704 現場投影／觸點驗收仍待完成。
 
+後續以 `npm run make:desktop` 產生的版本，總資料夾及可攜程式資料夾統一加上 `-YYYY-MM-DD-版次` 後綴，日期採台灣當日日期。下一版從第 5 版開始，例如 `out/recovery-candidate-2026-11-25-5/704 腦力競賽-win32-x64-2026-11-25-5/`；版次依 `out/` 既有新格式版本的最大值繼續遞增，跨日不歸零，請保留版本資料夾以維持序號。`BRAIN_GAME_OUTPUT_SLOT` 可指定總資料夾名稱前綴，日期與版次由腳本附加。既有版本名稱保留。
+
 - 製作規劃：`docs/製作規劃報告.md`
 - 原七款流程與規則：`docs/小遊戲流程與規則_v1.md`
 - 第八款數迴：`docs/數迴規則_v1.md`
