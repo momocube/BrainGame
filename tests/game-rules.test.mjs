@@ -164,7 +164,7 @@ test('board dimensions, mine start safety, sequence capacity, and answer grid st
     [rules => { rules.games.minesweeper.minesByRound[0] = 72; }, /保留安全起點周圍空格/],
     [rules => { delete rules.games.minesweeper.boardRect; }, /minesweeper 缺少 boardRect/],
     [rules => { rules.games.minesweeper.enabled = null; }, /minesweeper.enabled 必須是布林值/],
-    [rules => { rules.games.minesweeper.boardRows = 9; }, /必須是 10 欄×8 排/],
+    [rules => { rules.games.minesweeper.boardRows = 9; }, /必須是 8 欄×6 排/],
     [rules => { rules.games.memory_sequence.numberCountByRound[0] = 81; }, /不可填滿操作盤/],
     [rules => { rules.games.memory_sequence.memorySecondsByRound[0] = 601; }, /記憶時間不可超過 600 秒/],
     [rules => { rules.games.memory_sequence.heartDisplayRowsOneBased = [8, 9]; }, /必須顯示在第 9、10 排/],
@@ -172,4 +172,17 @@ test('board dimensions, mine start safety, sequence capacity, and answer grid st
     [rules => { rules.games.memory_poker.memoryGridColumns = 3; }, /牌數與牌面格數設定不相容/]
   ];
   for (const [change, error] of cases) assert.throws(() => validateGameRules(changedRules(change)), error);
+});
+
+
+test('new mine board is 8 by 6 while old 10-by-8 saved session rules still validate', () => {
+  assert.equal(defaults.games.minesweeper.boardColumns, 8);
+  assert.equal(defaults.games.minesweeper.boardRows, 6);
+  const legacy = changedRules(r => {
+    Object.assign(r.games.minesweeper, { boardColumns: 10, boardRows: 8,
+      mandatoryStartCellOneBased: { column: 5, row: 4 },
+      boardRect: { x: 0, y: 128, width: 640, height: 448 },
+      toolbarRect: { x: 0, y: 576, width: 640, height: 64 } });
+  });
+  assert.equal(validateGameRules(legacy).games.minesweeper.boardColumns, 10);
 });

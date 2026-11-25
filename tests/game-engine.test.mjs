@@ -226,7 +226,7 @@ test('difficulty boundaries generate valid questions for every round band', () =
       if (gameId === 'minesweeper') {
         assert.equal(question.mines.length, rules.games.minesweeper.minesByRound[round - 1]);
         assert.equal(question.numbers[question.anchor], 0);
-        assert.equal(question.cols * question.rows, 80);
+        assert.equal(question.cols * question.rows, 48);
       } else if (gameId === 'zero_sum_grid') {
         assert.ok(question.answers.length >= rules.games.zero_sum_grid.difficultyBands.find((band) => round >= band.firstRound && round <= band.lastRound).answerMin);
         assert.ok(question.answers.length <= rules.games.zero_sum_grid.difficultyBands.find((band) => round >= band.firstRound && round <= band.lastRound).answerMax);
@@ -1300,7 +1300,8 @@ test('touch hit regions match the board, keypad, card and choice layouts', () =>
   const mine = createEngine('minesweeper');
   const mineBoard = rules.games.minesweeper.boardRect;
   const anchor = mine.state.currentRound.question.anchor;
-  const minePoint = pointAt(mineBoard, anchor % 10, Math.floor(anchor / 10), 10, 8);
+  const { cols, rows } = mine.state.currentRound.question;
+  const minePoint = pointAt(mineBoard, anchor % cols, Math.floor(anchor / cols), cols, rows);
   mine.coordinateAction('P1', minePoint.u, minePoint.v);
   assert.ok(mine.state.currentRound.players.P1.revealed.includes(anchor));
   const toolbar = rules.games.minesweeper.toolbarRect;
@@ -1925,4 +1926,50 @@ test('mouse uses the same fixed exit strip and tap confirmation as TouchService'
   assert.ok(engine.state.exitConfirmation);
   send('down', 'confirm'); assert.equal(engine.state.phase, 'lobby'); send('up', 'confirm');
   assert.equal(engine.state.phase, 'lobby');
+});
+
+
+test('sequence covers only unanswered numbered cells, hides their values and resets covers after a mistake', () => {
+  const engine = createEngine('memory_sequence');
+  const round = engine.state.currentRound, player = round.players.P1;
+  const read = () => createStageSnapshot(engine, rules, zones).playerViews.P1.sequence;
+  assert.equal(read().covered.some(Boolean), false);
+  assert.deepEqual(read().values, player.values);
+  advance(engine, round.question.memorySeconds * 1000);
+  assert.deepEqual(read().covered, player.values.map(value => value > 0));
+  assert.ok(read().values.every(value => value === 0), 'covers must not expose the hidden digits');
+  const first = player.values.indexOf(1), empty = player.values.indexOf(0);
+  engine.act('P1', { index: first });
+  assert.equal(read().values[first], 1);
+  assert.equal(read().covered[first], false);
+  assert.equal(read().covered.filter(Boolean).length, round.question.count - 1);
+  assert.equal(read().covered[empty], false);
+  engine.act('P1', { index: empty });
+  assert.equal(read().hearts, rules.games.memory_sequence.heartsPerRound - 1);
+  assert.equal(read().covered[first], true);
+  assert.equal(read().covered[empty], false);
+  assert.ok(read().values.every(value => value === 0));
+  engine.finishRound('deadline');
+  assert.deepEqual(read().values, player.values);
+  assert.equal(read().covered.some(Boolean), false);
+});
+
+test('8-by-6 minesweeper ignores the removed perimeter and toggles only at the upper toolbar', () => {
+  const engine = createEngine('minesweeper', { seed: 20261125 });
+  const q = engine.state.currentRound.question, player = engine.state.currentRound.players.P1;
+  const { boardRect: board, toolbarRect: toolbar } = rules.games.minesweeper;
+  assert.equal(q.cols, 8); assert.equal(q.rows, 6); assert.equal(q.numbers.length, 48);
+  assert.equal(q.anchor, 3 + 2 * 8);
+  assert.ok(toolbar.y + toolbar.height <= board.y);
+  engine.coordinateAction('P1', (board.x + (q.anchor % q.cols + .5) * board.width / q.cols) / 640,
+    (board.y + (Math.floor(q.anchor / q.cols) + .5) * board.height / q.rows) / 640);
+  const before = structuredClone(player);
+  for (const [x, y] of [[32, 320], [608, 320], [320, 608]]) engine.coordinateAction('P1', x / 640, y / 640);
+  assert.deepEqual(player, before, 'the outside ring and old bottom toolbar must not accept input');
+  engine.coordinateAction('P1', (toolbar.x + toolbar.width / 2) / 640, (toolbar.y + toolbar.height / 2) / 640);
+  assert.equal(player.mode, 'flag');
+  const index = q.numbers.findIndex((_, i) => !player.revealed.includes(i));
+  engine.coordinateAction('P1', (board.x + (index % q.cols + .5) * board.width / q.cols) / 640,
+    (board.y + (Math.floor(index / q.cols) + .5) * board.height / q.rows) / 640);
+  assert.deepEqual(player.flags, [index]);
 });

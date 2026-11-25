@@ -1,5 +1,5 @@
 {
-  "rulesVersion": "1.0.12",
+  "rulesVersion": "1.0.13",
   "status": "prototype_in_progress",
   "updatedAt": "2026-11-25",
   "common": {
@@ -106,8 +106,8 @@
     "minesweeper": {
       "displayName": "踩地雷",
       "rounds": 5,
-      "boardColumns": 10,
-      "boardRows": 8,
+      "boardColumns": 8,
+      "boardRows": 6,
       "playSeconds": 120,
       "minesByRound": [
         8,
@@ -117,8 +117,8 @@
         16
       ],
       "mandatoryStartCellOneBased": {
-        "column": 5,
-        "row": 4
+        "column": 4,
+        "row": 3
       },
       "boardRowNumbering": "top_to_bottom",
       "startSafeRadiusCells": 1,
@@ -134,15 +134,15 @@
       "ranking": "finished_adjusted_time_then_incomplete_safe_reveal_count",
       "zeroProgressPoints": 0,
       "boardRect": {
-        "x": 0,
-        "y": 128,
-        "width": 640,
-        "height": 448
+        "x": 64,
+        "y": 192,
+        "width": 512,
+        "height": 384
       },
       "toolbarRect": {
-        "x": 0,
-        "y": 576,
-        "width": 640,
+        "x": 64,
+        "y": 128,
+        "width": 512,
         "height": 64
       }
     },

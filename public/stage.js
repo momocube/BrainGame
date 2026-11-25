@@ -173,7 +173,7 @@ function renderZone(zone, view, data) {
   if (round.gameId === 'memory_sequence') head.append(el('span', 'hearts', '♥ '.repeat(panel.sequence?.hearts ?? 0).trim() || '♡ ♡ ♡'));
   head.append(el('strong', '', timer)); header.append(head);
   if (round.gameId === 'minesweeper') {
-    header.append(el('div', 'zone-detail', `安全格 ${panel.mine?.safeProgress ?? 0} / ${80 - (q.mineCount ?? 0)}　踩雷 ${panel.mine?.hits?.length ?? 0}　旗標 ${panel.mine?.flags?.length ?? 0}　罰時 ${secondsLeft(panel.mine?.penaltyMs ?? 0)}`));
+    header.append(el('div', 'zone-detail', `安全格 ${panel.mine?.safeProgress ?? 0} / ${(q.cols ?? gameConfig.boardColumns) * (q.rows ?? gameConfig.boardRows) - (q.mineCount ?? 0)}　踩雷 ${panel.mine?.hits?.length ?? 0}　旗標 ${panel.mine?.flags?.length ?? 0}　罰時 ${secondsLeft(panel.mine?.penaltyMs ?? 0)}`));
   } else if (round.gameId === 'zero_sum_grid' || round.gameId === 'cube_count') {
     const numericEntryEnabled = Boolean(data.gameRules?.common?.layout?.numericEntryRect);
     const lockText = panel.lockRemainingMs > 0 ? `鎖答 ${secondsLeft(panel.lockRemainingMs)}` : '';
@@ -200,7 +200,7 @@ function renderZone(zone, view, data) {
     }
     return node;
   }
-  if (round.gameId === 'minesweeper') renderMineZone(body, panel.mine, q);
+  if (round.gameId === 'minesweeper') renderMineZone(body, panel.mine, q, gameConfig, data.gameRules.common.layout);
   else if (round.gameId === 'zero_sum_grid' || round.gameId === 'cube_count') renderKeypad(body, data.gameRules?.common?.layout, panel.entry, panel.lockRemainingMs);
   else if (round.gameId === 'solid_puzzle') renderChoices(body, q.choices ?? [], panel.selection, 'piece', panel.choiceOrder);
   else if (round.gameId === 'map_view') renderMapPlayer(body, q, panel.selection, gameConfig);
@@ -236,9 +236,18 @@ function renderSlitherlinkFloor(q = {}, answer = null) {
   return wrap;
 }
 
-function renderMineZone(body, mine = {}, q = {}) {
-  const board = el('div', 'answer-grid mine-board');
-  for (let i = 0; i < 80; i++) {
+function renderMineZone(body, mine = {}, q = {}, config = {}, layout = {}) {
+  body.classList.add('mine-body');
+  const flagMode = mine.mode === 'flag';
+  const board = el('div', 'answer-grid mine-board' + (flagMode ? ' mode-flag' : ' mode-reveal'));
+  const cols = q.cols ?? config.boardColumns ?? 8, rows = q.rows ?? config.boardRows ?? 6;
+  const position = (node, rect) => {
+    node.style.cssText = `left:${rect.x}px;top:${rect.y - (layout.interactiveRect?.y ?? 128)}px;width:${rect.width}px;height:${rect.height}px`;
+  };
+  position(board, config.boardRect ?? { x: 64, y: 192, width: 512, height: 384 });
+  board.style.gridTemplateColumns = `repeat(${cols},minmax(0,1fr))`;
+  board.style.gridTemplateRows = `repeat(${rows},minmax(0,1fr))`;
+  for (let i = 0; i < cols * rows; i++) {
     const cell = el('div', 'answer-cell');
     if (mine.revealed?.includes(i)) {
       cell.classList.add('open'); const value = mine.numbers?.[i]; cell.textContent = value === 0 ? '' : value === -1 ? '✹' : String(value ?? '');
@@ -247,7 +256,11 @@ function renderMineZone(body, mine = {}, q = {}) {
     else if (i === q.anchor && !(mine.revealed?.length)) { cell.classList.add('anchor'); cell.textContent = '起'; }
     board.append(cell);
   }
-  body.append(board, el('div', 'ready-button mine-toolbar', `切換操作：${mine.mode === 'flag' ? '標旗' : '揭露'}`));
+  const toolbar = el('div', 'ready-button mine-toolbar ' + (flagMode ? 'mode-flag' : 'mode-reveal'));
+  toolbar.append(el('strong', '', flagMode ? '⚑ 標記模式' : '揭露模式'),
+    el('small', '', flagMode ? '點此切換揭露' : '點此切換標記'));
+  position(toolbar, config.toolbarRect ?? { x: 64, y: 128, width: 512, height: 64 });
+  body.append(board, toolbar);
 }
 
 function renderKeypad(body, layout = {}, entry = '', lockRemainingMs = 0) {
@@ -344,11 +357,16 @@ function renderPokerZone(body, panel, q, elapsedMs, config) {
 function renderSequenceZone(body, sequence = {}, round, forceReveal = false, flashWrong = false) {
   const memoryMs = (round.question?.memorySeconds ?? 0) * 1000;
   const memory = forceReveal || round.elapsedMs < memoryMs;
-  const values = sequence.values ?? Array(80).fill(0);
-  const grid = el('div', 'answer-grid');
-  for (let i = 0; i < 80; i++) {
+  const cols = round.question?.cols ?? 10, rows = round.question?.rows ?? 8;
+  const values = sequence.values ?? Array(cols * rows).fill(0);
+  const grid = el('div', 'answer-grid sequence-grid');
+  for (let i = 0; i < cols * rows; i++) {
     const cell = el('div', 'answer-cell');
-    if (memory || values[i] > 0) { cell.classList.add('open'); cell.textContent = values[i] ? String(values[i]) : ''; }
+    if (values[i] > 0) {
+      cell.classList.add('sequence-number'); cell.textContent = String(values[i]);
+    } else if (!memory && sequence.covered?.[i]) {
+      cell.classList.add('sequence-covered');
+    }
     grid.append(cell);
   }
   const board = el('div', 'sequence-board-wrap');
@@ -370,7 +388,7 @@ function renderZoneResult(header, body, panel, data) {
     body.classList.add('zone-body-centered');
     body.append(el('div', 'floor-title', panel.hand.name), el('div', 'compact-info', panel.hand.labels?.join('　') ?? ''));
   } else if (data.currentRound?.gameId === 'minesweeper') {
-    renderMineZone(body, panel.mine, data.currentRound.question);
+    renderMineZone(body, panel.mine, data.currentRound.question, data.gameRules.games.minesweeper, data.gameRules.common.layout);
   } else if (data.currentRound?.gameId === 'slitherlink') {
     const q = data.currentRound.question ?? {};
     renderSlitherlinkZone(body, panel.slither, q, data.gameRules?.games?.slitherlink ?? {}, q.solution ?? null);
@@ -569,8 +587,11 @@ function renderMineSolution(q = {}) {
   const wrap = el('div', 'floor-stack');
   wrap.append(el('div', 'floor-title', '踩地雷・本輪解答'), el('div', 'floor-subtitle', `地雷 ${q.mines?.length ?? 0} 顆`));
   const board = el('div', 'floor-board');
+  const cols = q.cols ?? 8, rows = q.rows ?? 6;
+  board.style.gridTemplateColumns = `repeat(${cols},minmax(0,1fr))`;
+  board.style.gridTemplateRows = `repeat(${rows},minmax(0,1fr))`;
   const mines = new Set(q.mines ?? []);
-  for (let i = 0; i < 80; i++) {
+  for (let i = 0; i < cols * rows; i++) {
     const cell = el('div', `floor-number${mines.has(i) ? ' mine' : ''}`, mines.has(i) ? '✹' : q.numbers?.[i] ? String(q.numbers[i]) : '');
     board.append(cell);
   }

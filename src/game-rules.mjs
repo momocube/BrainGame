@@ -312,7 +312,9 @@ function validateGameStructure(gameId, config) {
   if (gameId === 'minesweeper') {
     assertInteger(config.boardColumns, `${gameId}.boardColumns`, 1, 100);
     assertInteger(config.boardRows, `${gameId}.boardRows`, 1, 100);
-    if (config.boardColumns !== 10 || config.boardRows !== 8) throw new Error('踩地雷棋盤必須是 10 欄×8 排');
+    if (![[8, 6], [10, 8]].some(([cols, rows]) => config.boardColumns === cols && config.boardRows === rows)) {
+      throw new Error('踩地雷棋盤必須是 8 欄×6 排（亦支援舊場次 10 欄×8 排）');
+    }
     if (!isRecord(config.mandatoryStartCellOneBased)) throw new Error('踩地雷 mandatoryStartCellOneBased 格式錯誤');
     assertInteger(config.mandatoryStartCellOneBased.column, 'minesweeper.mandatoryStartCellOneBased.column', 1, config.boardColumns);
     assertInteger(config.mandatoryStartCellOneBased.row, 'minesweeper.mandatoryStartCellOneBased.row', 1, config.boardRows);

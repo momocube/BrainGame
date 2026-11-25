@@ -5,7 +5,7 @@ const tutorials = {
     goal: "翻開所有安全格；數字代表周圍八格的地雷數。",
     steps: [
       "第一步只能翻開標示「起」的安全起點。",
-      "預設為揭露模式；需要記錄時按工具列切換標旗。插旗格須先拔旗才能揭露。",
+      "藍色為揭露模式，黃色為標記模式；按棋盤上方按鈕切換。插旗格須先拔旗才能揭露。",
       `翻到不同地雷每顆加 ${number(config, "penaltySecondsPerDistinctMine", 15)} 秒成績；揭開所有安全格即完成。`
     ],
     schedule: `每輪 ${number(config, "playSeconds", 120)} 秒・共 ${number(config, "rounds", 5)} 輪`
@@ -59,7 +59,7 @@ const tutorials = {
     const memoryTimes = config?.memorySecondsByRound ?? [6, 6, 5, 5, 4, 4, 3, 3, 2, 2];
     const low = Math.min(...memoryTimes), high = Math.max(...memoryTimes);
     return {
-      goal: "記住數字位置；蓋牌後由 1 開始，依序點到最大數字。",
+      goal: "記住黑底白字的數字位置；數字蓋成白格後，由 1 開始依序點到最大數字。",
       steps: [
         `記憶時間依輪次為 ${low}–${high} 秒；蓋牌後有 ${number(config, "answerSeconds", 18)} 秒作答。`,
         `點錯、空格或已完成的格會扣 1 心，數字全部蓋回並從 1 重來；不鎖答。`,
