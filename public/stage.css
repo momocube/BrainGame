@@ -353,3 +353,61 @@
 .idle-logo{display:block;width:86%;height:82%;object-fit:contain;user-select:none}
 
 #venue.idle-mode{background:#010207}
+
+/* Keep the lobby's input prerequisite visible until staff adds a player. */
+.shared-game-tile{position:relative}
+.lobby-player-required{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:28px;background:rgba(0,0,0,.84);color:#ff696f;pointer-events:none}
+.shared-game-tile .lobby-player-required strong{font-size:48px;line-height:1.2}
+.shared-game-tile .lobby-player-required small{font-size:28px;color:#ff9da1}
+.lobby-player-required span{font-size:24px;color:#ff9da1}
+.lobby-player-count{font-size:80px;font-weight:900;color:#80e3d8;line-height:1.2}
+.lobby-player-circles{display:flex;flex-wrap:wrap;justify-content:center;gap:28px;width:800px;max-width:100%;margin:24px 0}
+.lobby-player-circle{display:grid;place-items:center;flex:0 0 160px;width:160px;height:160px;border:8px solid #80e3d8;border-radius:50%;background:#123c48;color:#e5fffa;font-size:64px;font-weight:900}
+.shared-lobby-floor .lobby-player-warning{color:#ff696f;font-weight:900}
+
+/* Draw every poker frame inside its hit area so siblings and wall clipping cannot cover it. */
+.poker-grid .card-back,.poker-grid .card-face{position:relative;border:0;outline:0;box-shadow:none}
+.poker-grid .card-back::after,.poker-grid .card-face::after{content:"";position:absolute;inset:4px;border:3px solid #91abc7;pointer-events:none}
+.poker-grid .card-back.selected{outline:0;box-shadow:none;background:#145950;color:#fff}
+.poker-grid .card-back.selected::after{border:6px solid #73ffde}
+
+/* Let each menu icon stand on a soft white halo without a large rectangular frame. */
+.zone.shared-menu-zone{border:0;box-shadow:none;background:#0a111d}
+.shared-menu-content>.zone-header{background:transparent}
+.shared-game-tile,.shared-game-tile.random-game{border:0;background:transparent;box-shadow:none}
+.shared-game-icon-glow{position:relative;width:220px;height:220px;isolation:isolate}
+.shared-game-icon-glow::before{content:"";position:absolute;inset:-44px;z-index:-1;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.58) 0%,rgba(255,255,255,.3) 32%,rgba(255,255,255,.1) 53%,rgba(255,255,255,0) 72%);pointer-events:none}
+
+.answer-error-overlay{position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:32px;background:rgba(119,76,84,.9);color:#fff;text-align:center;pointer-events:none}
+.answer-error-overlay strong{font-size:160px;font-weight:900;line-height:1.2}
+.answer-error-countdown{font-size:36px;font-weight:700;line-height:1.4}
+
+/* Give scores their own large line; fit long/tied scores within each result card. */
+.result-score-value{color:#f5f8ff;font-weight:900;line-height:1;white-space:nowrap;font-variant-numeric:tabular-nums}
+.result-score-value[data-rank="1"]{color:#ffdb62}
+.result-score-value[data-rank="2"]{color:#78dfff}
+.result-score-value[data-rank="3"]{color:#f0ac84}
+.result-scoreboard .result-score-value{font-size:min(420px,calc(92cqw / var(--score-width)),58cqh)}
+.result-scoreboard .result-person strong{font-size:clamp(14px,min(10cqw,14cqh),48px)}
+.result-scoreboard .result-person small{font-size:clamp(10px,min(6cqw,9cqh),28px)}
+.result-scoreboard .result-person{gap:6px;padding:8px}
+#floor>.round-results-screen{grid-template-rows:auto minmax(0,.45fr) minmax(0,1.55fr)}
+.player-results-content{grid-template-rows:256px 384px}
+.player-results-content>.zone-header{height:256px;gap:4px;padding:8px 12px;align-items:center}
+.player-results-content>.zone-body{transform:scale(.75);transform-origin:top center}
+.player-results-content .zone-result-heading{font-size:24px;line-height:28px;font-weight:800;white-space:nowrap}
+.player-results-content .result-score-value{font-size:180px;line-height:180px}
+.player-results-content .zone-result-detail{font-size:22px;line-height:26px;color:#d4e2f3;white-space:nowrap}
+
+/* Clip transformed countdown glyphs and their shadows at each physical surface. */
+.floor,.zone,.question-panel{contain:paint;isolation:isolate;clip-path:inset(0)}
+.zone-inner,.question-content{clip-path:inset(0)}
+
+.shared-lobby-heading{position:absolute;z-index:2;display:grid;place-items:center;font-size:88px;font-weight:900;line-height:1.1;color:#fff;text-align:center;pointer-events:none;overflow:hidden}
+.player-game-header{display:grid;grid-template-rows:50px 44px 22px;gap:0;padding:6px 8px;justify-items:center;align-content:center}
+.player-game-title{width:100%;font-size:44px;font-weight:900;line-height:50px;text-align:center;white-space:nowrap}
+.player-game-clock{display:flex;align-items:center;justify-content:center;gap:12px;height:44px;color:#d7e4f5;font-size:24px;line-height:44px;white-space:nowrap}
+.player-game-clock .player-time-value{font-size:42px;line-height:44px;font-weight:900;color:#ff626b;font-variant-numeric:tabular-nums}
+.player-game-header .zone-detail{font-size:14px;line-height:22px;height:22px;min-height:0;max-width:100%}
+.player-countdown-header{align-items:center;justify-content:center}
+.game-countdown{color:#ff626b}

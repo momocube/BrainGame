@@ -26,6 +26,7 @@ const GAME_ICONS = { minesweeper: '01_minesweeper', zero_sum_grid: '02_zero_sum_
 let state;
 let lastRenderedStructureKey = null;
 const lastSequenceWrongCount = new Map();
+const mineErrorFeedback = new Map();
 const floor = $('#floor');
 let tutorialProgress = { active: false, heldMs: 0, requiredMs: 1000, receivedAt: 0 };
 
@@ -76,11 +77,19 @@ function sharedMenuTile(option, data, split) {
   const tile = el('div', `shared-game-tile${option.id === 'random' ? ' random-game' : ''}`);
   const icons = GAME_ICONS;
   if (icons[option.id]) {
-    const icon = el('img', 'shared-game-icon'); icon.src = `/icons/${icons[option.id]}.png`; icon.alt = ''; tile.append(icon);
+    const glow = el('div', 'shared-game-icon-glow');
+    const icon = el('img', 'shared-game-icon'); icon.src = `/icons/${icons[option.id]}.png`; icon.alt = '';
+    glow.append(icon); tile.append(glow);
   }
   tile.append(el('strong', '', option.name));
   tile.append(el('small', '', option.id === 'random' ? '全體共同抽選一款遊戲' : `全體共同遊玩・${option.rounds} 輪`));
   tile.append(el('span', 'shared-game-prompt', data.phase === 'lobby' ? (split ? '觸碰此半邊選擇' : '觸碰此區域選擇') : '全場確認中'));
+  if (data.phase === 'lobby' && !(data.layout?.participantCount > 0)) {
+    tile.setAttribute('aria-disabled', 'true');
+    const mask = el('div', 'lobby-player-required');
+    mask.append(el('strong', '', '請先選擇玩家'), el('small', '', '請由工作人員加入玩家'), el('span', '', '尚未開放選擇遊戲'));
+    tile.append(mask);
+  }
   return tile;
 }
 
@@ -146,7 +155,7 @@ function renderTutorialSolid(gameId, step) {
 }
 
 /** One wall of the shared lobby menu; the last wall may hold several options side by side. */
-function renderSharedMenuZone(zone, options, position, total, data) {
+function renderSharedMenuZone(zone, options, data) {
   if (!options?.length) return null;
   const node = el('section', 'zone shared-menu-zone');
   node.dataset.menuZoneId = zone.id;
@@ -157,9 +166,6 @@ function renderSharedMenuZone(zone, options, position, total, data) {
   content.style.width = '640px'; content.style.height = '640px';
   content.style.transform = `rotate(${zone.rotationDegrees}deg)`;
   const header = el('div', 'zone-header');
-  header.append(el('div', 'zone-name', '704 全場共用選單'));
-  const range = options.length > 1 ? `${position + 1}–${position + options.length}` : String(position + 1);
-  header.append(el('div', 'zone-head', `共同選項 ${range} / ${total}`));
   const body = el('div', 'zone-body shared-menu-body');
   if (options.length === 1) body.append(sharedMenuTile(options[0], data, false));
   else {
@@ -221,7 +227,8 @@ function renderZone(zone, view, data) {
   }
   if (data.phase === 'countdown') {
     const number = Math.max(1, Math.ceil((data.currentRound?.countdownMs ?? 0) / 1000));
-    header.append(el('div', 'zone-head', `${gameNames[data.currentRound?.gameId] ?? '遊戲'}・第 ${data.currentRound?.round ?? ''} 輪`));
+    header.classList.add('player-countdown-header');
+    header.append(el('div', 'player-game-title', gameNames[data.currentRound?.gameId] ?? '遊戲'), el('div', 'zone-detail', `第 ${data.currentRound?.round ?? ''} 輪`));
     body.classList.add('zone-body-centered'); body.append(el('div', 'floor-title game-countdown', String(number))); return node;
   }
   if (data.phase === 'round_results') {
@@ -238,10 +245,11 @@ function renderZone(zone, view, data) {
   const gameConfig = data.gameRules?.games?.[round.gameId] ?? {};
   const timer = round.gameId === 'memory_poker' ? pokerPhase(round.elapsedMs, gameConfig)
     : round.gameId === 'memory_sequence' ? sequencePhase(round, gameConfig) : secondsLeft(round.limitMs - round.elapsedMs);
-  const head = el('div', 'zone-head');
-  head.append(el('span', '', `${gameNames[round.gameId]}・${round.round}`));
-  if (round.gameId === 'memory_sequence') head.append(el('span', 'hearts', '♥ '.repeat(panel.sequence?.hearts ?? 0).trim() || '♡ ♡ ♡'));
-  head.append(el('strong', '', timer)); header.append(head);
+  header.classList.add('player-game-header');
+  header.append(el('div', 'player-game-title', gameNames[round.gameId]));
+  const clock = el('div', 'player-game-clock');
+  clock.append(el('span', 'player-time-label'), el('strong', 'player-time-value'), el('span', '', '秒'));
+  header.append(clock); updatePlayerClock(clock, timer);
   if (round.gameId === 'minesweeper') {
     header.append(el('div', 'zone-detail', `安全格 ${panel.mine?.safeProgress ?? 0} / ${(q.cols ?? gameConfig.boardColumns) * (q.rows ?? gameConfig.boardRows) - (q.mineCount ?? 0)}　踩雷 ${panel.mine?.hits?.length ?? 0}　旗標 ${panel.mine?.flags?.length ?? 0}　罰時 ${secondsLeft(panel.mine?.penaltyMs ?? 0)}`));
   } else if (round.gameId === 'zero_sum_grid' || round.gameId === 'cube_count') {
@@ -250,10 +258,11 @@ function renderZone(zone, view, data) {
     header.append(el('div', `zone-detail${numericEntryEnabled ? ' numeric-lock-detail' : ''}`,
       numericEntryEnabled ? lockText : `目前輸入：${panel.entry || '—'}${lockText ? `　${lockText}` : ''}`));
   } else if (round.gameId === 'memory_poker') {
-    header.append(el('div', 'zone-detail poker-selection-detail', `已選 ${panel.selected?.length ?? 0} / 2`));
+    header.append(el('div', 'zone-detail', `第 ${round.round} 輪`));
   } else if (round.gameId === 'memory_sequence') {
-    header.append(el('div', 'zone-detail', round.elapsedMs < (q.memorySeconds ?? 0) * 1000
-      ? '記憶數字位置' : `下一個：${(panel.sequence?.progress ?? 0) + 1}　最佳：${panel.sequence?.bestProgress ?? 0}`));
+    const hearts = '♥'.repeat(panel.sequence?.hearts ?? 0) || '♡♡♡';
+    header.append(el('div', 'zone-detail', hearts + '　' + (round.elapsedMs < (q.memorySeconds ?? 0) * 1000
+      ? '記憶數字位置' : `下一個：${(panel.sequence?.progress ?? 0) + 1}　最佳：${panel.sequence?.bestProgress ?? 0}`)));
   } else if (round.gameId === 'slitherlink') {
     const edges = panel.slither?.edges ?? [];
     header.append(el('div', 'zone-detail',
@@ -262,7 +271,7 @@ function renderZone(zone, view, data) {
   const isDone = panel.done || panel.eliminated;
   if (isDone) {
     body.classList.add('zone-body-centered');
-    body.append(el('div', 'floor-title', panel.eliminated ? '本輪結束' : '完成'), el('div', 'compact-info', '等待其他玩家'));
+    body.append(el('div', 'floor-title', panel.eliminated ? '本輪結束' : '正確'), el('div', 'compact-info', '等待其他玩家'));
     if (flashSequenceError && panel.eliminated) {
       const flash = el('div', 'sequence-wrong-flash sequence-wrong-flash-zone');
       flash.setAttribute('aria-hidden', 'true');
@@ -277,8 +286,48 @@ function renderZone(zone, view, data) {
   else if (round.gameId === 'memory_poker') renderPokerZone(body, panel, q, round.elapsedMs, gameConfig);
   else if (round.gameId === 'memory_sequence') renderSequenceZone(body, panel.sequence, round, false, flashSequenceError);
   else if (round.gameId === 'slitherlink') renderSlitherlinkZone(body, panel.slither, q, gameConfig);
-  if (panel.error) header.append(el('div', 'zone-feedback', panel.error));
+  if (panel.error && (!panel.error.includes('鎖答') || panel.lockRemainingMs > 0)) header.append(el('div', 'zone-feedback', panel.error));
+  updateAnswerErrorOverlay(content, panel);
+  if (round.gameId === 'minesweeper') renderMineErrorFeedback(content, zone.id, panel.mine, round.id);
   return node;
+}
+
+function renderMineErrorFeedback(content, zoneId, mine, roundId) {
+  const previous = mineErrorFeedback.get(zoneId);
+  const sameRound = previous?.roundId === roundId;
+  const hits = mine?.hits?.length ?? 0;
+  const until = hits > (sameRound ? previous.hits : 0) ? performance.now() + 900 : (sameRound ? previous.until : 0);
+  mineErrorFeedback.set(zoneId, { roundId, hits, until });
+  const remaining = until - performance.now();
+  if (remaining <= 0) return;
+  const mask = el('div', 'answer-error-overlay mine-error-feedback');
+  mask.setAttribute('role', 'status');
+  mask.append(el('strong', '', '錯誤'), el('span', 'answer-error-countdown', '踩中地雷，可繼續作答'));
+  content.append(mask);
+  window.setTimeout(() => mask.remove(), remaining);
+}
+
+function updatePlayerClock(clock, timer) {
+  if (!clock) return;
+  const match = /^(.*?)(\d+)s$/.exec(timer);
+  setTextIfChanged(clock.querySelector('.player-time-label'), match?.[1]?.trim() || '剩餘');
+  setTextIfChanged(clock.querySelector('.player-time-value'), match?.[2] ?? timer);
+}
+
+/** Use the server's remaining lock time, including after pause/resume or reconnect. */
+function updateAnswerErrorOverlay(content, panel) {
+  let mask = content.querySelector('.answer-error-overlay:not(.mine-error-feedback)');
+  if (!(panel.lockRemainingMs > 0) || panel.done || panel.eliminated) {
+    mask?.remove();
+    return;
+  }
+  if (!mask) {
+    mask = el('div', 'answer-error-overlay');
+    mask.setAttribute('role', 'status');
+    mask.append(el('strong', '', '錯誤'), el('span', 'answer-error-countdown'));
+    content.append(mask);
+  }
+  setTextIfChanged(mask.querySelector('.answer-error-countdown'), `${secondsLeft(panel.lockRemainingMs)} 後可繼續作答`);
 }
 
 /** Player wall board: the SVG uses the same 640×640 local coordinates as touch hit-testing. */
@@ -457,18 +506,22 @@ function renderSequenceZone(body, sequence = {}, round, forceReveal = false, fla
 
 function renderZoneResult(header, body, panel, data) {
   const resultRow = data.results?.[0]?.rows?.find((result) => result.zoneId === panel.zoneId);
+  header.parentElement.classList.add('player-results-content');
+  const rankLabel = resultRow?.rank ? `第 ${resultRow.rank} 名` : '未完成';
+  header.append(el('div', 'zone-result-heading', `${data.results?.[0]?.gameName ?? '本輪結算'}・${rankLabel}`),
+    resultScore(resultRow?.score ?? 0, resultRow?.rank, true));
   if (data.currentRound?.gameId === 'memory_sequence' && panel.sequence) {
     const wrongCount = panel.sequence.wrongCount ?? 0;
     const review = !resultRow?.completed || wrongCount > 0;
     body.classList.add(review ? 'sequence-result-review' : 'sequence-result-clean');
     header.classList.add('sequence-result-header');
-    header.append(el('div', 'zone-head', `公布答案・第 ${data.currentRound.round} 輪`));
+    header.querySelector('.zone-result-heading').textContent = `公布答案・第 ${data.currentRound.round} 輪・${rankLabel}`;
     const status = resultRow?.completed ? '已完成' : '未完成';
-    header.append(el('div', 'zone-detail', `${status}${wrongCount ? `・答錯 ${wrongCount} 次` : ''}・${resultRow?.rank ? `第 ${resultRow.rank} 名` : '未排名'}　+${resultRow?.score ?? 0} 分`));
+    header.append(el('div', 'zone-result-detail', `${status}${wrongCount ? `・答錯 ${wrongCount} 次` : ''}`));
     renderSequenceZone(body, panel.sequence, data.currentRound, true);
     return;
   }
-  header.append(el('div', 'zone-head', `${data.results?.[0]?.gameName ?? '本輪結算'}・${resultRow?.rank ? `第 ${resultRow.rank} 名` : '未完成'}　+${resultRow?.score ?? 0} 分`));
+  header.append(el('div', 'zone-result-detail', `本輪加分・累積 ${(panel.score ?? 0).toFixed(1)} 分`));
   if (panel.hand) {
     body.classList.add('zone-body-centered');
     body.append(el('div', 'floor-title', panel.hand.name), el('div', 'compact-info', panel.hand.labels?.join('　') ?? ''));
@@ -512,8 +565,20 @@ function renderFloor(data) {
   if (data.phase === 'lobby') {
     const joined = data.layout?.participantCount ?? 0;
     const box = el('div', 'shared-floor-screen shared-lobby-floor');
-    box.append(el('div', 'floor-title', '704 全場共用遊戲選單'));
-    box.append(el('div', 'floor-subtitle', `周圍牆面上的選項合為一份選單；全體共同選擇同一款遊戲。已加入 ${joined} 位玩家，玩家加入由工作人員控制。`));
+    box.append(el('div', 'lobby-player-count', `已選擇 ${joined} 位玩家`));
+    if (joined > 0) {
+      const markers = el('div', 'lobby-player-circles');
+      markers.setAttribute('aria-label', `已選擇 ${joined} 位玩家`);
+      for (let i = 0; i < joined; i++) {
+        const circle = el('div', 'lobby-player-circle', String(i + 1));
+        circle.setAttribute('aria-hidden', 'true');
+        markers.append(circle);
+      }
+      box.append(markers);
+    }
+    box.append(el('div', `floor-subtitle${joined ? '' : ' lobby-player-warning'}`, joined
+      ? '請共同選擇牆面上的一款遊戲'
+      : '請由工作人員先選擇玩家，再選擇遊戲'));
     floor.append(box);
     return;
   }
@@ -639,7 +704,7 @@ function renderQuestionPanel(panel, data) {
   if (['paused', 'resume_countdown'].includes(data.phase)) {
     showTitle(data.phase === 'paused' ? '遊戲暫停' : '即將繼續', data.notice ?? '', content);
   } else if (data.phase === 'lobby') {
-    showTitle('全場共用遊戲選單', '請在周圍牆面共同選擇一款遊戲', content);
+    showTitle('請選擇遊戲', '請在周圍牆面共同選擇一款遊戲', content);
   } else if (data.phase === 'game_preview') {
     showTitle(`${gameNames[data.selectedGame] ?? '小遊戲'}・遊戲介紹`, '請在所選遊戲牆面觸碰圓形「確定」或「取消」按鈕。', content);
   } else {
@@ -657,7 +722,7 @@ function renderPlayerProgress(data, target) {
   grid.style.gridTemplateColumns = `repeat(${scoreboardColumnCount(participantIds.length)}, minmax(0, 1fr))`;
   for (const zoneId of participantIds) {
     const player = data.playerViews?.[zoneId] ?? {};
-    const status = player.eliminated ? '本輪淘汰' : player.done ? '已完成' : '進行中';
+    const status = player.eliminated ? '本輪淘汰' : player.done ? '正確' : '進行中';
     const item = el('div', 'result-person');
     item.append(el('strong', '', `${zoneId}・${status}`));
     item.append(el('small', '', `累積 ${(player.score ?? 0).toFixed(1)} 分${player.error ? `・${player.error}` : ''}`));
@@ -672,13 +737,13 @@ function renderRoundStandings(data, target) {
   const wrap = el('div', 'floor-stack scoreboard-screen');
   wrap.append(el('div', 'floor-title', `${result?.gameName ?? ''}・第 ${result?.round ?? ''} 輪結算`));
   wrap.append(el('div', 'floor-subtitle', '答題區顯示本輪解答；以下為名次與加分'));
-  const grid = el('div', 'result-grid scoreboard');
+  const grid = el('div', 'result-grid scoreboard result-scoreboard');
   const rows = [...(result?.rows ?? [])].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999));
-  grid.style.gridTemplateColumns = `repeat(${scoreboardColumnCount(rows.length)}, minmax(0, 1fr))`;
+  grid.style.gridTemplateColumns = `repeat(${target === floor && rows.length > 4 ? 4 : scoreboardColumnCount(rows.length)}, minmax(0, 1fr))`;
   for (const row of rows) {
     const item = el('div', 'result-person');
     item.append(el('strong', '', `${row.rank ? `第 ${row.rank} 名` : '未完成'}・${row.zoneId}`));
-    item.append(el('small', '', `${row.completed ? '完成' : '未完成'}　+${row.score} 分`));
+    item.append(resultScore(row.score, row.rank, true), el('small', '', row.completed ? '完成・本輪加分' : '未完成・本輪加分'));
     grid.append(item);
   }
   wrap.append(grid);
@@ -725,6 +790,7 @@ function createCubeViewSvg(q, azimuthDegrees, elevationDegrees) {
   return createIsometricSvg(cells, {
     azimuthDegrees, elevationDegrees, bounds: [sizeX, sizeY, q.maxHeight ?? 6],
     viewWidth: 320, viewHeight: 350, margin: 18, className: 'cube-svg',
+    edgeWidth: 0.405,
     label: `方塊堆疊固定視角 ${azimuthDegrees} 度`
   });
 }
@@ -940,26 +1006,35 @@ function renderRoundResult(data, target = floor) {
   else if (result?.gameId === 'map_view') answerPanel.append(renderMapFloor(q, result.answer));
   else if (result?.gameId === 'memory_sequence') answerPanel.append(el('div', 'floor-subtitle', '請查看牆面，揭露本區數字順序與本輪最佳進度'));
   wrap.append(answerPanel);
-  const grid = el('div', 'result-grid scoreboard');
+  const grid = el('div', 'result-grid scoreboard result-scoreboard');
   const rows = [...(result?.rows ?? [])].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999));
-  grid.style.gridTemplateColumns = `repeat(${scoreboardColumnCount(rows.length)}, minmax(0, 1fr))`;
+  grid.style.gridTemplateColumns = `repeat(${target === floor && rows.length > 4 ? 4 : scoreboardColumnCount(rows.length)}, minmax(0, 1fr))`;
   for (const row of rows) {
     const item = el('div', 'result-person');
     item.append(el('strong', '', `${row.rank ? `第 ${row.rank} 名` : '未完成'}・${row.zoneId}`));
-    item.append(el('small', '', `${row.completed ? '完成' : '未完成'}　+${row.score} 分`)); grid.append(item);
+    item.append(resultScore(row.score, row.rank, true), el('small', '', row.completed ? '完成・本輪加分' : '未完成・本輪加分')); grid.append(item);
   }
   wrap.append(grid); target.append(wrap);
 }
 function renderFinalResult(data, target = floor) {
   const wrap = el('div', 'floor-stack scoreboard-screen'); wrap.append(el('div', 'floor-title', '本場總成績'));
-  const grid = el('div', 'result-grid scoreboard');
+  const grid = el('div', 'result-grid scoreboard result-scoreboard');
   const rankings = data.finalRankings ?? [];
-  grid.style.gridTemplateColumns = `repeat(${scoreboardColumnCount(rankings.length)}, minmax(0, 1fr))`;
+  grid.style.gridTemplateColumns = `repeat(${target === floor && rankings.length > 4 ? 4 : scoreboardColumnCount(rankings.length)}, minmax(0, 1fr))`;
   for (const row of rankings) {
     const item = el('div', 'result-person'); item.append(el('strong', '', `第 ${row.rank} 名・${row.zoneId}`));
-    item.append(el('small', '', `${row.score} 分　完成 ${row.roundsPlayed} 輪`)); grid.append(item);
+    item.append(resultScore(row.score, row.rank), el('small', '', `總分・完成 ${row.roundsPlayed} 輪`)); grid.append(item);
   }
   wrap.append(grid); target.append(wrap);
+}
+
+function resultScore(score, rank, added = false) {
+  const text = `${added ? '+' : ''}${score}`;
+  const value = el('div', 'result-score-value', text);
+  value.dataset.rank = String(rank ?? '');
+  value.style.setProperty('--score-width', String(Math.max(2, text.length) * .66));
+  value.setAttribute('aria-label', `${added ? '加' : ''}${score} 分`);
+  return value;
 }
 
 function renderReservedArea(item) {
@@ -1018,14 +1093,21 @@ function render(data) {
     const slots = data.menuSlots ?? (data.menuZones ?? []).map((zone, index) => ({
       zoneId: zone.id, optionIds: options[index] ? [options[index].id] : []
     }));
-    const total = slots.reduce((sum, slot) => sum + slot.optionIds.length, 0);
-    let position = 0;
     for (const zone of data.menuZones ?? []) {
       const slot = slots.find((item) => item.zoneId === zone.id);
       const zoneOptions = (slot?.optionIds ?? []).map((id) => optionById.get(id)).filter(Boolean);
-      const node = renderSharedMenuZone(zone, zoneOptions, position, total, data);
-      position += zoneOptions.length;
+      const node = renderSharedMenuZone(zone, zoneOptions, data);
       if (node) zones.append(node);
+    }
+    if (data.phase === 'lobby') {
+      // TouchService face 0 is the physical Wall Left; local y=0–128 is rows 10 and 9.
+      const leftWall = sharedTutorialWalls((data.menuZones ?? []).filter(zone => zone.rotationDegrees === 0 && zone.rect.y === 0))[0];
+      if (leftWall) {
+        const heading = el('div', 'shared-lobby-heading', '請選擇遊戲');
+        heading.style.cssText = rectStyle({ ...leftWall.rect, height: 128 });
+        heading.dataset.face = '0';
+        zones.append(heading);
+      }
     }
   } else if (data.phase === 'tutorial') {
     for (const wall of sharedTutorialWalls(data.menuZones ?? [])) zones.append(renderSharedTutorialWall(wall, data));
@@ -1061,7 +1143,9 @@ function updateVolatileStageText(data) {
     for (const zone of $('#zones').querySelectorAll('.zone')) {
       const panel = data.playerViews?.[zone.dataset.zoneId];
       if (!panel?.joined) continue;
-      setTextIfChanged(zone.querySelector('.zone-head strong'), timer);
+      updatePlayerClock(zone.querySelector('.player-game-clock'), timer);
+      updateAnswerErrorOverlay(zone.querySelector('.zone-content'), panel);
+      if (panel.error?.includes('鎖答') && !(panel.lockRemainingMs > 0)) zone.querySelector('.zone-feedback')?.remove();
       if (round.gameId === 'zero_sum_grid' || round.gameId === 'cube_count') {
         setTextIfChanged(zone.querySelector('.numeric-entry-value'), panel.entry || '—');
         const lockText = panel.lockRemainingMs > 0 ? `鎖答 ${secondsLeft(panel.lockRemainingMs)}` : '';

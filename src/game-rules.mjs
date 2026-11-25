@@ -264,7 +264,7 @@ function validateGameStructure(gameId, config) {
     solid_puzzle: ['confirmationRequired', 'removeWrongOptions', 'clearSelectionOnWrongAnswer', 'allOptionsSameCubeCount', 'allowRigidRotation', 'allowReflection', 'validateInsertionMotionPath'],
     memory_poker: ['communityCardsVisibleDuringMemory', 'uniqueCardsAcrossMemoryAndCommunity', 'sameCardMayBeSelectedByDifferentPlayers', 'samePositionTwiceForOnePlayer', 'confirmationLocksSelection', 'autoSubmitCompleteSelectionAtDeadline', 'replaceSelectionOnThirdCardTap', 'selectedCardsRemainHiddenUntilResults', 'suitsBreakTies', 'selectionSpeedBreaksTies', 'aceLowStraightAllowed', 'wrapAroundStraightAllowed'],
     map_view: ['confirmationRequired', 'clearSelectionOnWrongAnswer', 'removeWrongOptions', 'answerIncludesPositionAndHeading', 'playerControlledCamera', 'sameLabelsForAllPlayers'],
-    memory_sequence: ['resetToFirstNumberOnError', 'reshuffleOnError', 'revealMemoryAgainOnError', 'reconcealCompletedCellsOnError', 'emptyOrPreviouslyCompletedCellCountsAsError', 'retainBestPrefixOnError', 'remainingHeartsBreakTies'],
+    memory_sequence: ['resetToFirstNumberOnError', 'reshuffleOnError', 'revealMemoryAgainOnError', 'reconcealCompletedCellsOnError', ...(Object.hasOwn(config, 'emptyOrPreviouslyCompletedCellCountsAsError') ? ['emptyOrPreviouslyCompletedCellCountsAsError'] : ['emptyCellCountsAsError', 'previouslyCompletedCellCountsAsError']), 'retainBestPrefixOnError', 'remainingHeartsBreakTies'],
     slitherlink: ['sameBoardForAllPlayers', 'crossMarksAffectCompletion']
   }[gameId];
   const commonRequired = ['rounds', ...(['memory_poker', 'memory_sequence'].includes(gameId) ? [] : ['playSeconds'])];

@@ -62,7 +62,7 @@ const tutorials = {
       goal: "記住黑底白字的數字位置；數字蓋成白格後，由 1 開始依序點到最大數字。",
       steps: [
         `記憶時間依輪次為 ${low}–${high} 秒；蓋牌後有 ${number(config, "answerSeconds", 18)} 秒作答。`,
-        `點錯、空格或已完成的格會扣 1 心，數字全部蓋回並從 1 重來；不鎖答。`,
+        `黑色空格不扣心。數字順序按錯扣 1 心，數字全部蓋回並從 1 重來；不鎖答。`,
         `${number(config, "heartsPerRound", 3)} 顆心用完即淘汰；依序完成整串即可完成本輪。`
       ],
       schedule: `共 ${number(config, "rounds", 10)} 輪・每輪記憶 ${low}–${high} 秒／作答 ${number(config, "answerSeconds", 18)} 秒`

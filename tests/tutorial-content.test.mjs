@@ -41,6 +41,7 @@ test("special-game tutorials preserve poker phases and memory-sequence reset rul
   const sequence = getGameTutorial("memory_sequence", rules.games.memory_sequence);
   assert.match(sequence.steps[0], /2–6 秒/);
   assert.match(sequence.steps[1], /從 1 重來；不鎖答/);
+  assert.match(sequence.steps[1], /黑色空格不扣心/);
   assert.match(sequence.steps[2], /3 顆心/);
   assert.match(sequence.schedule, /共 10 輪・每輪記憶 2–6 秒／作答 18 秒/);
 });

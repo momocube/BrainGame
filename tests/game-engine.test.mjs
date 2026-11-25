@@ -879,11 +879,36 @@ test('Texas hand comparison keys use kickers for trips and two pair', () => {
   assert.deepEqual(evaluateFiveCardHand(hand([10, 10, 8, 8, 12])).key, [2, 10, 8, 12]);
 });
 
+test('memory sequence ignores every black empty cell without changing hearts or progress', () => {
+  const engine = createEngine('memory_sequence', { participants: ['P1', 'P2'] });
+  const round = engine.state.currentRound;
+  advance(engine, round.question.memorySeconds * 1_000);
+  for (const id of ['P1', 'P2']) {
+    const player = round.players[id];
+    const first = player.values.indexOf(1);
+    for (const progress of [0, 1]) {
+      if (progress) engine.act(id, { index: first });
+      const before = structuredClone(player);
+      for (let repeat = 0; repeat < 4; repeat++) player.values.forEach((value, index) => {
+        if (value === 0) engine.act(id, { index });
+      });
+      assert.deepEqual(player, before, 'black cells must not consume hearts, reset progress, or trigger feedback');
+    }
+    engine.act(id, { index: player.values.indexOf(3) });
+    assert.equal(player.hearts, rules.games.memory_sequence.heartsPerRound - 1);
+    assert.equal(player.progress, 0);
+    assert.equal(player.bestProgress, 1);
+    assert.equal(player.wrongCount, 1);
+    for (let value = 1; value <= round.question.count; value++) engine.act(id, { index: player.values.indexOf(value) });
+    assert.notEqual(player.doneAtMs, null);
+  }
+});
+
 test('memory sequence resets immediately on error but retains best progress', () => {
   const engine = createEngine('memory_sequence');
   const player = engine.state.currentRound.players.P1;
   const values = player.values;
-  const first = values.indexOf(1), second = values.indexOf(2), wrong = values.findIndex((value) => value === 0);
+  const first = values.indexOf(1), second = values.indexOf(2), wrong = values.indexOf(1);
   advance(engine, engine.state.currentRound.question.memorySeconds * 1_000);
 
   engine.act('P1', { index: first });
@@ -902,7 +927,7 @@ test('memory sequence resets immediately on error but retains best progress', ()
 test('memory sequence exposes a changing wrong-press count for immediate visual feedback', () => {
   const engine = createEngine('memory_sequence');
   const player = engine.state.currentRound.players.P1;
-  const wrong = player.values.findIndex((value) => value === 0);
+  const wrong = player.values.indexOf(2);
   advance(engine, engine.state.currentRound.question.memorySeconds * 1_000);
 
   assert.equal(createStageSnapshot(engine, rules, zones).playerViews.P1.sequence.wrongCount, 0);
@@ -1952,6 +1977,10 @@ test('sequence covers only unanswered numbered cells, hides their values and res
   assert.equal(read().covered.filter(Boolean).length, round.question.count - 1);
   assert.equal(read().covered[empty], false);
   engine.act('P1', { index: empty });
+  assert.equal(read().hearts, rules.games.memory_sequence.heartsPerRound);
+  assert.equal(read().values[first], 1);
+  assert.equal(read().covered[first], false);
+  engine.act('P1', { index: first });
   assert.equal(read().hearts, rules.games.memory_sequence.heartsPerRound - 1);
   assert.equal(read().covered[first], true);
   assert.equal(read().covered[empty], false);

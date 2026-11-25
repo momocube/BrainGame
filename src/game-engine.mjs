@@ -1293,6 +1293,7 @@ export class GameEngine {
     if (t < 0 || t >= config.answerSeconds * 1000 || player.doneAtMs !== null || player.eliminatedAtMs !== null) return;
     const index = Number(action.index);
     if (!Number.isInteger(index) || index < 0 || index >= question.cols * question.rows) return;
+    if (player.values[index] === 0) return;
     player.presses++;
     if (player.values[index] === player.progress + 1) {
       player.progress++;

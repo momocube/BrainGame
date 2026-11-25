@@ -30,6 +30,19 @@ test('older saved rules without numeric field rectangles remain valid for recove
   assert.equal(validateGameRules(legacy).rulesVersion, defaults.rulesVersion);
 });
 
+test('memory sequence distinguishes empty cells and wrong-order repeats while accepting legacy snapshots', () => {
+  assert.equal(defaults.games.memory_sequence.emptyCellCountsAsError, false);
+  assert.equal(defaults.games.memory_sequence.previouslyCompletedCellCountsAsError, true);
+  const legacy = structuredClone(defaults);
+  delete legacy.games.memory_sequence.emptyCellCountsAsError;
+  delete legacy.games.memory_sequence.previouslyCompletedCellCountsAsError;
+  legacy.games.memory_sequence.emptyOrPreviouslyCompletedCellCountsAsError = true;
+  assert.deepEqual(validateGameRules(legacy), legacy);
+  const malformed = structuredClone(defaults);
+  malformed.games.memory_sequence.emptyCellCountsAsError = 'false';
+  assert.throws(() => validateGameRules(malformed), /emptyCellCountsAsError/);
+});
+
 test('map view wall layout places the six answer keys beneath the map and above confirmation', () => {
   const map = defaults.games.map_view;
   assert.deepEqual(map.mapPanelRect, { x: 0, y: 128, width: 640, height: 256 });
