@@ -1,5 +1,6 @@
 import { CAD_SCENE, PROJECTION_CANVAS, calculateProjectionFit } from './projection-layout.mjs';
 import { installMouseInput } from './mouse-input.mjs';
+import { EXIT_BUTTONS, canPlayerExit } from './exit-control.mjs';
 
 import { renderPerspectiveSceneSvg } from './map-scene.mjs';
 import { getGameTutorial } from './tutorial-content.mjs';
@@ -745,6 +746,28 @@ function renderReservedArea(item) {
   return node;
 }
 
+function renderExitControl(data) {
+  const control = data.sharedExitControl;
+  if (!control || !canPlayerExit(data, data.gameRules.common.sessionDurationSeconds * 1000)) return null;
+  const node = el('section', 'shared-exit-control');
+  node.style.cssText = rectStyle(control.rect);
+  node.setAttribute('aria-label', '全體退出小遊戲並回到大廳');
+  const confirming = data.exitConfirmation?.roundId === data.currentRound.id;
+  if (confirming) {
+    node.classList.add('confirming');
+    node.append(el('div', 'shared-exit-title', '全體退出'), el('div', 'shared-exit-note', '成績保留'));
+  }
+  for (const action of confirming ? ['confirm', 'cancel'] : ['request']) {
+    const button = el('div', `shared-exit-button shared-exit-${action}`,
+      { request: '退出遊戲', confirm: '長按確認', cancel: '取消退出' }[action]);
+    const rect = EXIT_BUTTONS[action];
+    button.style.cssText = `left:${rect.x * 100}%;top:${rect.y * 100}%;width:${rect.width * 100}%;height:${rect.height * 100}%`;
+    button.setAttribute('aria-label', action === 'confirm' ? '長按一秒後放開，全體回到大廳；保留已結算成績，取消未結算本輪' : button.textContent);
+    node.append(button);
+  }
+  return node;
+}
+
 function render(data) {
   if (!data) return;
   const structureKey = stageStructureKey(data);
@@ -768,6 +791,8 @@ function render(data) {
     for (const zone of data.zones ?? []) zones.append(renderZone(zone, views, data));
   }
   for (const area of data.reservedRects ?? []) zones.append(renderReservedArea(area));
+  const exitControl = renderExitControl(data);
+  if (exitControl) zones.append(exitControl);
   renderFloor(data);
   const overlay = $('#overlay');
   if (data.phase === 'paused' || data.phase === 'resume_countdown') {

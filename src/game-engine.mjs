@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { resolvePlayerLayout } from './player-layouts.mjs';
 import { cubeColumnsAreReadable } from './cube-visibility.mjs';
 import { validateGameRules } from './game-rules.mjs';
+import { EXIT_CONTROL_ZONE, EXIT_CONFIRM_HOLD_MS, EXIT_BUTTONS, canPlayerExit, exitActionAt } from '../public/exit-control.mjs';
 
 const GAME_ORDER = [
   'minesweeper', 'zero_sum_grid', 'cube_count', 'solid_puzzle',
@@ -725,11 +726,12 @@ export class GameEngine {
       phase: 'idle', sessionId: null, sessionStartedAt: null, sessionElapsedMs: 0,
       sessionExpired: false, participantIds: [], participants: {},
       selectedGame: null, gameRoundIndex: 0, currentRound: null,
-      results: [], notice: '', pauseInfo: null, updatedAt: new Date().toISOString()
+      results: [], notice: '', pauseInfo: null, exitConfirmation: null, updatedAt: new Date().toISOString()
     };
   }
 
   recoverAfterRestart() {
+    this.state.exitConfirmation = null;
     if (this.restoredRulesError && this.state.sessionId && !['idle', 'final_results'].includes(this.state.phase)) {
       this.state.currentRound = null;
       this.state.selectedGame = null;
@@ -778,6 +780,7 @@ export class GameEngine {
     const state = structuredClone(this.state);
     state.input = { ready: this.inputsReady, detail: this.inputDetail,
       mouseTest: Boolean(this.mouseTestEnabled), phaseRevision: this.phaseRevision };
+    state.sharedExitControl = structuredClone(this.zoneConfig.sharedExitControl ?? null);
     state.remainingSessionMs = Math.max(0, this.rules.common.sessionDurationSeconds * 1000 - state.sessionElapsedMs);
     state.remainingRoundMs = this.state.phase === 'playing' && this.state.currentRound
       ? Math.max(0, this.state.currentRound.limitMs - this.state.currentRound.elapsedMs) : null;
@@ -822,6 +825,7 @@ export class GameEngine {
 
   save() {
     if (this.savedPhase !== this.state.phase) {
+      this.state.exitConfirmation = null;
       this.phaseRevision++;
       this.savedPhase = this.state.phase;
     }
@@ -1241,6 +1245,26 @@ export class GameEngine {
     const x = u * width, y = v * height;
     const inside = (rect) => x >= rect.x && y >= rect.y && x < rect.x + rect.width && y < rect.y + rect.height;
     const phase = this.state.phase;
+    if (zoneId === EXIT_CONTROL_ZONE) {
+      if (!canPlayerExit(this.state, this.rules.common.sessionDurationSeconds * 1000)) return;
+      const confirming = this.state.exitConfirmation?.roundId === this.state.currentRound.id;
+      const action = exitActionAt(u, v, confirming);
+      if (action === 'request') {
+        this.state.exitConfirmation = { roundId: this.state.currentRound.id };
+        this.phaseRevision++;
+        this.recordPlayerInput(null, { type: 'request-exit-game' });
+        this.save();
+      } else if (action === 'cancel') {
+        this.state.exitConfirmation = null;
+        this.phaseRevision++;
+        this.recordPlayerInput(null, { type: 'cancel-exit-game' });
+        this.save();
+      } else if (action === 'confirm' && heldMs >= EXIT_CONFIRM_HOLD_MS) {
+        this.recordPlayerInput(null, { type: 'confirm-exit-game' });
+        this.returnToLobby();
+      }
+      return;
+    }
     if (zoneId === 'FLOOR') {
       if (phase === 'tutorial' &&
           this.pointInsideHoldTarget({ x: 0.25, y: 0.76, width: 0.5, height: 0.18 }, { u, v }) &&
@@ -1336,6 +1360,11 @@ export class GameEngine {
   }
 
   touchHoldTarget(zoneId, position) {
+    if (zoneId === EXIT_CONTROL_ZONE && this.state.phase === 'playing' &&
+        this.state.exitConfirmation?.roundId === this.state.currentRound?.id &&
+        exitActionAt(position.u, position.v, true) === 'confirm') {
+      return { phase: 'playing', kind: 'confirm-exit-game', rect: EXIT_BUTTONS.confirm };
+    }
     const rect = { x: 0.25, y: 0.76, width: 0.5, height: 0.18 };
     if (this.state.phase === 'tutorial' && zoneId === 'FLOOR' && this.pointInsideHoldTarget(rect, position)) {
       return { phase: 'tutorial', kind: 'complete-tutorial', rect };
@@ -1485,6 +1514,13 @@ export class GameEngine {
     const cadPoint = this.touchCadPoint(px);
     if (!cadPoint) return null;
     const { x: cadX, y: cadY } = cadPoint;
+    const exitControl = this.zoneConfig.sharedExitControl;
+    if (exitControl && canPlayerExit(this.state, this.rules.common.sessionDurationSeconds * 1000) &&
+        faceIndex === exitControl.face && cadX >= exitControl.rect.x && cadY >= exitControl.rect.y &&
+        cadX < exitControl.rect.x + exitControl.rect.width && cadY < exitControl.rect.y + exitControl.rect.height) {
+      return { zoneId: EXIT_CONTROL_ZONE, u: (cadX - exitControl.rect.x) / exitControl.rect.width,
+        v: (cadY - exitControl.rect.y) / exitControl.rect.height };
+    }
     const floor = this.layout.floorRect;
     if (this.state.phase === 'tutorial' && floor && faceIndex === floor.face &&
         cadX >= floor.rect.x && cadY >= floor.rect.y &&

@@ -214,3 +214,13 @@
 #mouse-test-hint{position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:20;padding:8px 14px;border:1px solid #f1c65b;border-radius:8px;background:#32270ee8;color:#ffe6a3;font:14px/1.4 sans-serif;pointer-events:none;white-space:nowrap}
 #mouse-test-hint[hidden]{display:none}
 #venue.mouse-test-enabled{cursor:pointer;user-select:none;touch-action:none}
+
+.shared-exit-control{position:absolute;z-index:3;background:#111d2d;border-inline:2px solid #52657b;box-sizing:border-box;overflow:hidden}
+.shared-exit-button{position:absolute;box-sizing:border-box;display:flex;align-items:center;justify-content:center;writing-mode:vertical-rl;text-orientation:upright;letter-spacing:2px;font-size:26px;font-weight:900;line-height:1;white-space:nowrap;border:3px solid #be8b6f;border-radius:12px;background:#57342a;color:#fff0e2;user-select:none}
+.shared-exit-request{font-size:32px;letter-spacing:8px}
+.shared-exit-control.confirming{background:#101923;border-color:#d4b06b}
+.shared-exit-title,.shared-exit-note{position:absolute;left:0;width:100%;display:flex;align-items:center;justify-content:center;writing-mode:vertical-rl;text-orientation:upright;line-height:1;letter-spacing:4px;font-weight:800;white-space:nowrap}
+.shared-exit-title{top:8px;height:128px;font-size:26px;color:#fff0d6}
+.shared-exit-note{top:152px;height:80px;font-size:18px;letter-spacing:1px;color:#bad4c3}
+.shared-exit-confirm{background:#782e35;border-color:#f18b91}
+.shared-exit-cancel{background:#1a4d4c;border-color:#72d8c7}

@@ -15,8 +15,10 @@ export function handleMouseInput(engine, payload, clientId) {
   const inside = (rect) => point.x >= rect.x && point.y >= rect.y &&
     point.x < rect.x + rect.width && point.y < rect.y + rect.height;
   const floor = engine.layout.floorRect;
+  const exitControl = engine.zoneConfig.sharedExitControl;
   const zones = ['lobby', 'game_preview'].includes(engine.state.phase) ? engine.menuZones : engine.zones;
-  const face = engine.state.phase === 'tutorial' && floor && inside(floor.rect)
+  const face = exitControl && inside(exitControl.rect) ? exitControl.face
+    : engine.state.phase === 'tutorial' && floor && inside(floor.rect)
     ? floor.face : zones.flatMap((zone) => zone.sources).find(inside)?.face;
   // An outside move/release cancels a held tutorial control.
   if (face == null) { engine.contacts.delete(id); return; }

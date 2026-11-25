@@ -67,6 +67,15 @@ export function validatePlayerZoneConfig(layout, touchProfile) {
   const playerIds = new Set();
   const displayRects = [];
   const sourceRects = [];
+  const exitControl = layout.sharedExitControl;
+  if (exitControl && (!Number.isInteger(exitControl.face) || !faceRects[exitControl.face] ||
+      ignoredFaces.has(exitControl.face) || decorativeFaces.has(exitControl.face) ||
+      !validRect(exitControl.rect) || !inside(exitControl.rect, faceRects[exitControl.face]))) {
+    throw layoutError('共用退出按鈕必須位於有效牆面空白區');
+  }
+  if (exitControl && reservedRects.some((area) => overlaps(exitControl.rect, area.rect))) {
+    throw layoutError('共用退出按鈕不可覆蓋入口保留區');
+  }
 
   for (const player of layout.players) {
     if (!player?.id || playerIds.has(player.id)) throw layoutError(`玩家區 ID 無效或重複：${player?.id ?? ''}`);
@@ -84,6 +93,9 @@ export function validatePlayerZoneConfig(layout, touchProfile) {
       if (overlaps(player.rect, reserved.rect)) throw layoutError(`${player.id} 覆蓋入口保留區 ${reserved.id}`);
     }
     displayRects.push({ id: player.id, rect: player.rect });
+    if (exitControl && overlaps(exitControl.rect, player.rect)) {
+      throw layoutError(`共用退出按鈕與 ${player.id} 答題區重疊`);
+    }
 
     if (!Array.isArray(player.sources) || !player.sources.length) {
       throw layoutError(`${player.id} 沒有 TouchService 輸入來源`);
@@ -138,6 +150,9 @@ export function validatePlayerZoneConfig(layout, touchProfile) {
           throw layoutError(`${expectedCount} 人版型的題目區識別或玩家配對無效`);
         }
         questionIds.add(panel.id);
+        if (exitControl && overlaps(exitControl.rect, panel.rect)) {
+          throw layoutError(`共用退出按鈕與 ${panel.id} 題目區重疊`);
+        }
         if (![0, 90, 180, 270].includes(panel.rotationDegrees) || !validRect(panel.rect) || !inside(panel.rect, profileBounds)) {
           throw layoutError(`${panel.id} 題目顯示區無效或超出 CAD 畫布`);
         }

@@ -7,6 +7,7 @@ import { GameEngine, GAME_IDS, evaluateFiveCardHand, preflightGameQuestions } fr
 import { cubeColumnsAreReadable } from '../src/cube-visibility.mjs';
 import { createStageSnapshot } from '../src/stage-view.mjs';
 import { handleMouseInput } from '../src/mouse-input.mjs';
+import { EXIT_BUTTONS, EXIT_CONTROL_ZONE } from '../public/exit-control.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const rules = JSON.parse(fs.readFileSync(path.join(ROOT, 'config/game-rules.v1.json'), 'utf8'));
@@ -1772,4 +1773,88 @@ test('mouse input hits numeric keys across player layouts and ignores stale phas
     assert.equal(engine.state.phase, 'lobby');
     assert.throws(() => handleMouseInput(engine, { phase: 'down', px: [NaN, 1], phaseRevision: engine.phaseRevision }, 'test'), /位置/);
   }
+});
+
+function exitTouchEvent(id, phase, action, u = 0.5) {
+  const r = zones.sharedExitControl.rect;
+  const button = EXIT_BUTTONS[action];
+  return { id, phase, face: zones.sharedExitControl.face,
+    px: [r.y + (button.y + button.height / 2) * r.height, 3328 - (r.x + u * r.width)] };
+}
+
+for (const gameId of GAME_IDS) {
+  test(`${gameId}: shared wall exit needs confirmation and keeps settled rankings`, () => {
+    const engine = createEngine('cube_count', { participants: ['P1', 'P2', 'P3'] });
+    submitNumber(engine, 'P1', engine.state.currentRound.question.total);
+    engine.finishRound('deadline');
+    const standings = engine.finalRankings(), results = structuredClone(engine.state.results);
+    engine.returnToLobby(); engine.selectGame(gameId); engine.confirmGameSelection(); engine.startAfterTutorial(); advance(engine, 3000);
+    let now = 0; engine.clock = () => now; engine.lastTick = now; engine.touchReleaseTimeoutMs = 170;
+    let id = 100;
+    const gesture = (action, duration = 200) => {
+      const touchId = id++;
+      engine.handleTouchFrame(touchFrame([exitTouchEvent(touchId, 'down', action)], [touchId]));
+      now += duration;
+      engine.handleTouchFrame(touchFrame([exitTouchEvent(touchId, 'up', action)], []));
+    };
+    gesture('request');
+    assert.equal(engine.state.phase, 'playing');
+    assert.equal(engine.state.exitConfirmation.roundId, engine.state.currentRound.id);
+    gesture('confirm', 300);
+    assert.equal(engine.state.phase, 'playing', 'a short confirmation click cannot exit');
+    gesture('cancel');
+    assert.equal(engine.state.exitConfirmation, null);
+    assert.equal(engine.state.phase, 'playing');
+    gesture('request');
+    gesture('confirm', 1170);
+    assert.equal(engine.state.phase, 'lobby');
+    assert.equal(engine.state.exitConfirmation, null);
+    assert.equal(engine.state.currentRound, null);
+    assert.deepEqual(engine.finalRankings(), standings);
+    assert.deepEqual(engine.state.results, results);
+    assert.deepEqual(engine.state.participantIds, ['P1', 'P2', 'P3']);
+  });
+}
+
+test('exit confirmation cancels on drag-out, phase changes, restart, and rejects inactive inputs', () => {
+  const engine = createEngine('cube_count', { participants: ['P1', 'P2'] });
+  const send = (id, phase, action, alive = phase === 'up' ? [] : [id]) =>
+    engine.handleTouchFrame(touchFrame([exitTouchEvent(id, phase, action)], alive));
+  send(1, 'down', 'request'); send(1, 'up', 'request');
+  engine.act('P1', { key: '7' });
+  engine.tick(100);
+  assert.equal(engine.state.currentRound.players.P1.entry, '7', 'confirmation does not block normal gameplay');
+  assert.equal(engine.state.currentRound.elapsedMs, 100);
+  send(2, 'down', 'confirm'); engine.contacts.get('2').started -= 2000;
+  send(2, 'move', 'cancel'); send(2, 'up', 'confirm');
+  assert.equal(engine.state.phase, 'playing');
+  assert.ok(engine.state.exitConfirmation);
+  send(3, 'down', 'confirm'); engine.contacts.get('3').started -= 2000;
+  engine.finishRound('deadline');
+  assert.equal(engine.state.exitConfirmation, null);
+  engine.prepareRound(); advance(engine, 3000);
+  send(3, 'up', 'confirm');
+  assert.equal(engine.state.phase, 'playing', 'an old held contact cannot exit the new round');
+  send(4, 'down', 'request'); send(4, 'up', 'request');
+  const restored = new GameEngine({ rules, zones, initialState: structuredClone(engine.state), onSave() {} });
+  assert.equal(restored.state.exitConfirmation, null);
+  engine.pause();
+  assert.equal(engine.state.exitConfirmation, null);
+  assert.equal(engine.canvasPosition(zones.sharedExitControl.face, exitTouchEvent(5, 'down', 'request').px), null);
+  engine.returnToLobby();
+  engine.coordinateAction(EXIT_CONTROL_ZONE, 0.5, 0.5, 2000);
+  assert.equal(engine.state.phase, 'lobby');
+  assert.equal(engine.state.exitConfirmation, null);
+});
+
+test('mouse uses the same fixed exit strip and long-press confirmation as TouchService', () => {
+  const engine = createEngine('cube_count');
+  engine.mouseTestEnabled = true;
+  let now = 0; engine.clock = () => now; engine.lastTick = now;
+  const send = (phase, action, revision = engine.phaseRevision) =>
+    handleMouseInput(engine, { ...exitTouchEvent(1, phase, action), phaseRevision: revision }, 'exit-test');
+  send('down', 'request'); send('up', 'request');
+  assert.ok(engine.state.exitConfirmation);
+  send('down', 'confirm'); now += 1000; send('up', 'confirm');
+  assert.equal(engine.state.phase, 'lobby');
 });

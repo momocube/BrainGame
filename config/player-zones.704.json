@@ -2,6 +2,10 @@
   "venue": "704",
   "source": "TouchService 704 CAD canvas rotated clockwise 90 degrees, cropped to 3328x2688 CAD view; eight-player plan rotated 180 degrees to keep the entrance clear",
   "canvas": { "width": 3328, "height": 2688 },
+  "sharedExitControl": {
+    "id": "shared-exit", "name": "共用退出遊戲", "face": 0,
+    "rect": { "x": 640, "y": 0, "width": 64, "height": 640 }
+  },
   "reservedRects": [
     {
       "id": "entrance-clearance",

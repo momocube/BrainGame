@@ -132,3 +132,16 @@ test('4-player question panels are output-only and stay clear of touch zones and
   invalid.profilePlan.questionPanelSlots['top-question'].rect = structuredClone(layout.reservedRects[0].rect);
   assert.throws(() => validatePlayerZoneConfig(invalid, touchProfile), /題目區覆蓋入口保留區/);
 });
+
+test('shared exit strip occupies a fixed real wall gap for every player layout', () => {
+  const control = layout.sharedExitControl;
+  assert.deepEqual(control.rect, { x: 640, y: 0, width: 64, height: 640 });
+  assert.equal(control.face, 0);
+  assert.equal(validatePlayerZoneConfig(layout, touchProfile), true);
+  const overlap = structuredClone(layout);
+  overlap.sharedExitControl.rect.x = 704;
+  assert.throws(() => validatePlayerZoneConfig(overlap, touchProfile), /退出按鈕.*重疊/);
+  const wrongFace = structuredClone(layout);
+  wrongFace.sharedExitControl.face = 5;
+  assert.throws(() => validatePlayerZoneConfig(wrongFace, touchProfile), /退出按鈕.*牆面/);
+});
