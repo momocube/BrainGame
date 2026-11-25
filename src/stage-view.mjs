@@ -54,6 +54,7 @@ export function createStageSnapshot(engine, rules, zones) {
       const showSolution = resultPhase;
       view.sequence = {
         hearts: player.hearts, progress: player.progress, bestProgress: player.bestProgress,
+        wrongCount: player.wrongCount ?? 0,
         values: memoryPhase || showSolution ? [...player.values]
           : player.values.map((value) => value > 0 && value <= player.progress ? value : 0)
       };

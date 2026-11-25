@@ -353,7 +353,7 @@ function initialPlayerRound(gameId, question, rules, randomInt, sequenceVariantI
     const variant = question.variantPositions[sequenceVariantIndex ?? randomInt(question.variantPositions.length)];
     const values = Array(question.cols * question.rows).fill(0);
     variant.forEach((cell, index) => { values[cell] = index + 1; });
-    return { values, hearts: rules.games.memory_sequence.heartsPerRound, progress: 0, bestProgress: 0, firstReached: {}, doneAtMs: null, eliminatedAtMs: null, presses: 0 };
+    return { values, hearts: rules.games.memory_sequence.heartsPerRound, progress: 0, bestProgress: 0, firstReached: {}, doneAtMs: null, eliminatedAtMs: null, presses: 0, wrongCount: 0 };
   }
   return {};
 }
@@ -1213,6 +1213,7 @@ export class GameEngine {
     } else {
       player.hearts--;
       player.progress = 0;
+      player.wrongCount = (player.wrongCount ?? 0) + 1;
       player.lastError = '答錯，請從 1 重新開始';
       if (player.hearts <= 0) player.eliminatedAtMs = t;
     }
@@ -1226,16 +1227,7 @@ export class GameEngine {
     const inside = (rect) => x >= rect.x && y >= rect.y && x < rect.x + rect.width && y < rect.y + rect.height;
     const phase = this.state.phase;
     if (zoneId === 'FLOOR') {
-      if (phase === 'game_preview') {
-        const action = this.gamePreviewActionAt(u, v);
-        if (action === 'confirm') {
-          this.recordPlayerInput(null, { type: 'confirm-game-selection', gameId: this.state.selectedGame }, { phase: 'game_preview' });
-          this.confirmGameSelection();
-        } else if (action === 'cancel') {
-          this.recordPlayerInput(null, { type: 'cancel-game-selection', gameId: this.state.selectedGame }, { phase: 'game_preview' });
-          this.returnToLobby();
-        }
-      } else if (phase === 'tutorial' &&
+      if (phase === 'tutorial' &&
           this.pointInsideHoldTarget({ x: 0.25, y: 0.76, width: 0.5, height: 0.18 }, { u, v }) &&
           heldMs >= this.rules.common.readyHoldSeconds * 1000) {
         this.recordPlayerInput(null, { type: 'complete-tutorial' }, { phase: 'tutorial', relatedZones: [...this.state.participantIds] });
@@ -1243,12 +1235,20 @@ export class GameEngine {
       }
       return;
     }
+    if (phase === 'game_preview') {
+      const action = this.gamePreviewActionAt(zoneId, u, v);
+      if (action === 'confirm') {
+        this.recordPlayerInput(zoneId, { type: 'confirm-game-selection', gameId: this.state.selectedGame }, { phase: 'game_preview' });
+        this.confirmGameSelection();
+      } else if (action === 'cancel') {
+        this.recordPlayerInput(zoneId, { type: 'cancel-game-selection', gameId: this.state.selectedGame }, { phase: 'game_preview' });
+        this.returnToLobby();
+      }
+      return;
+    }
     const joined = Boolean(this.state.participants[zoneId]);
     const player = this.currentPlayer(zoneId);
     if (!joined) return;
-    if (phase === 'game_preview') {
-      return;
-    }
     if (phase === 'tutorial') {
       return;
     }
@@ -1424,7 +1424,7 @@ export class GameEngine {
         }
       }
       if (this.state.phase === 'game_preview') {
-        const previews = singleTouches.map((touch) => ({ touch, action: this.gamePreviewActionAt(touch.u, touch.v) }))
+        const previews = singleTouches.map((touch) => ({ touch, action: this.gamePreviewActionAt(touch.zoneId, touch.u, touch.v) }))
           .filter((item) => item.action);
         const actions = [...new Set(previews.map((item) => item.action))];
         if (actions.length > 1) {
@@ -1471,7 +1471,7 @@ export class GameEngine {
     if (!cadPoint) return null;
     const { x: cadX, y: cadY } = cadPoint;
     const floor = this.layout.floorRect;
-    if (['game_preview', 'tutorial'].includes(this.state.phase) && floor && faceIndex === floor.face &&
+    if (this.state.phase === 'tutorial' && floor && faceIndex === floor.face &&
         cadX >= floor.rect.x && cadY >= floor.rect.y &&
         cadX < floor.rect.x + floor.rect.width && cadY < floor.rect.y + floor.rect.height) {
       return {
@@ -1480,7 +1480,7 @@ export class GameEngine {
         v: (cadY - floor.rect.y) / floor.rect.height
       };
     }
-    const zones = this.state.phase === 'lobby' ? this.menuZones : this.zones;
+    const zones = ['lobby', 'game_preview'].includes(this.state.phase) ? this.menuZones : this.zones;
     for (const zone of zones) {
       for (const source of zone.sources) {
         if (source.face !== faceIndex || cadX < source.x || cadY < source.y ||
@@ -1509,9 +1509,17 @@ export class GameEngine {
     return null;
   }
 
-  gamePreviewActionAt(u, v) {
-    if (v < 0.76 || v >= 0.94) return null;
-    return u < 0.5 ? 'confirm' : 'cancel';
+  gamePreviewActionAt(zoneId, u, v) {
+    const menuIndex = this.menuZones.findIndex((zone) => zone.id === zoneId);
+    if (menuIndex < 0 || this.gameOrder[menuIndex] !== this.state.selectedGame) return null;
+    const buttons = [
+      { action: 'confirm', x: 0.25 },
+      { action: 'cancel', x: 0.75 }
+    ];
+    for (const button of buttons) {
+      if (Math.hypot(u - button.x, v - 0.6) <= 0.125) return button.action;
+    }
+    return null;
   }
 
   lobbyGameAt(zoneId, u, v) {

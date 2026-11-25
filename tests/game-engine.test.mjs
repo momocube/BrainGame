@@ -880,6 +880,20 @@ test('memory sequence resets immediately on error but retains best progress', ()
   assert.equal(player.hearts, 2);
 });
 
+test('memory sequence exposes a changing wrong-press count for immediate visual feedback', () => {
+  const engine = createEngine('memory_sequence');
+  const player = engine.state.currentRound.players.P1;
+  const wrong = player.values.findIndex((value) => value === 0);
+  advance(engine, engine.state.currentRound.question.memorySeconds * 1_000);
+
+  assert.equal(createStageSnapshot(engine, rules, zones).playerViews.P1.sequence.wrongCount, 0);
+  engine.act('P1', { index: wrong });
+  assert.equal(createStageSnapshot(engine, rules, zones).playerViews.P1.sequence.wrongCount, 1);
+  engine.act('P1', { index: wrong });
+  assert.equal(createStageSnapshot(engine, rules, zones).playerViews.P1.sequence.wrongCount, 2,
+    'consecutive mistakes each change the stage structure so the red flash can replay');
+});
+
 test('pausing freezes the session and round clocks through the resume countdown', () => {
   const engine = createEngine('zero_sum_grid');
   advance(engine, 4_000);
@@ -1488,7 +1502,8 @@ test('staff joins a player, who can choose, prepare, start and answer through To
   engine.handleTouchFrame(touchFrame([menuTouchEvent(82, 'down', 0.5, 0.6, 'P1', engine)], [82]));
   assert.equal(engine.state.phase, 'game_preview');
   assert.equal(engine.state.selectedGame, 'minesweeper');
-  engine.handleTouchFrame(touchFrame([floorTouchEvent(83, 'down', 0.25, 0.82)], [83]));
+  const confirmZone = engine.menuZones[engine.gameOrder.indexOf(engine.state.selectedGame)];
+  engine.handleTouchFrame(touchFrame([menuTouchEvent(83, 'down', 0.25, 0.6, confirmZone.id, engine)], [83]));
   assert.equal(engine.state.phase, 'tutorial');
 
   const readyPoint = { u: 0.5, v: 0.85 };
@@ -1549,8 +1564,32 @@ test('lobby offers random selection and rejects conflicting choices from the sam
   assert.equal(shared.state.phase, 'game_preview');
   assert.equal(shared.state.selectedGame, 'minesweeper');
 
+  const selectedWall = shared.menuZones[shared.gameOrder.indexOf(shared.state.selectedGame)];
+  assert.equal(shared.gamePreviewActionAt(selectedWall.id, 0.25, 0.6), 'confirm');
+  assert.equal(shared.gamePreviewActionAt(selectedWall.id, 0.75, 0.6), 'cancel');
+  assert.equal(shared.gamePreviewActionAt(shared.menuZones[1].id, 0.25, 0.6), null,
+    'preview controls appear only on the selected game wall');
+  assert.equal(shared.gamePreviewActionAt(selectedWall.id, 0.5, 0.6), null,
+    'the darkened mask outside both circular buttons is not interactive');
   shared.coordinateAction('FLOOR', 0.25, 0.82);
-  assert.equal(shared.state.phase, 'tutorial', 'a player confirms the selected game before the tutorial begins');
+  assert.equal(shared.state.phase, 'game_preview', 'the floor no longer confirms the selected game');
+  shared.handleTouchFrame(touchFrame([menuTouchEvent(78, 'down', 0.25, 0.6, selectedWall.id, shared)], [78]));
+  assert.equal(shared.state.phase, 'tutorial', 'the selected wall circle confirms the game before the tutorial begins');
+
+  const secondWallGame = createLobby();
+  const inactiveMenuIndex = secondWallGame.gameOrder.findIndex((_, index) =>
+    !secondWallGame.zones.some((zone) => zone.id === secondWallGame.menuZones[index]?.id));
+  assert.ok(inactiveMenuIndex >= 0, 'the active player layout leaves fixed menu surfaces for non-player walls');
+  const inactiveMenuZone = secondWallGame.menuZones[inactiveMenuIndex];
+  secondWallGame.handleTouchFrame(touchFrame([optionTouch(secondWallGame, inactiveMenuIndex, 79)], [79]));
+  assert.equal(secondWallGame.state.selectedGame, secondWallGame.gameOrder[inactiveMenuIndex]);
+  assert.equal(secondWallGame.zones.some((zone) => zone.id === inactiveMenuZone.id), false,
+    `${inactiveMenuZone.id} is a menu wall outside the active player positions`);
+  const secondWallConfirm = menuTouchEvent(80, 'down', 0.25, 0.6, inactiveMenuZone.id, secondWallGame);
+  assert.equal(secondWallGame.canvasPosition(secondWallConfirm.face, secondWallConfirm.px)?.zoneId, inactiveMenuZone.id,
+    'preview input continues to use all eight fixed menu walls');
+  secondWallGame.handleTouchFrame(touchFrame([secondWallConfirm], [80]));
+  assert.equal(secondWallGame.state.phase, 'tutorial');
 
   const noPlayerLobby = new GameEngine({ rules, zones, onSave() {} });
   startReadySession(noPlayerLobby);
@@ -1568,8 +1607,9 @@ test('lobby offers random selection and rejects conflicting choices from the sam
   assert.equal(random.state.phase, 'game_preview');
   assert.ok(GAME_IDS.includes(random.state.selectedGame));
   assert.match(random.state.notice, /隨機抽中/);
-  random.coordinateAction('FLOOR', 0.25, 0.82);
-  assert.equal(random.state.phase, 'tutorial', 'random selection is shown before a player confirms it');
+  const randomSelectionWall = random.menuZones[random.gameOrder.indexOf(random.state.selectedGame)];
+  random.coordinateAction(randomSelectionWall.id, 0.25, 0.6);
+  assert.equal(random.state.phase, 'tutorial', 'the drawn game wall hosts the confirmation control');
 });
 
 test('game preview can be cancelled, and one player can complete the shared tutorial', () => {
@@ -1580,13 +1620,14 @@ test('game preview can be cancelled, and one player can complete the shared tuto
 
   engine.selectGame('memory_poker');
   assert.equal(engine.state.phase, 'game_preview');
-  engine.coordinateAction('FLOOR', 0.75, 0.82);
+  const selectedWall = engine.menuZones[engine.gameOrder.indexOf('memory_poker')];
+  engine.coordinateAction(selectedWall.id, 0.75, 0.6);
   assert.equal(engine.state.phase, 'lobby', 'cancel returns to the game menu');
   assert.equal(engine.state.selectedGame, null);
 
   engine.selectGame('memory_poker');
-  engine.coordinateAction('FLOOR', 0.25, 0.82);
-  assert.equal(engine.state.phase, 'tutorial', 'the shared floor confirm opens the fixed tutorial');
+  engine.coordinateAction(selectedWall.id, 0.25, 0.6);
+  assert.equal(engine.state.phase, 'tutorial', 'the circular control on the selected wall opens the fixed tutorial');
   engine.coordinateAction('P1', 0.5, 0.85, 5_000);
   assert.equal(engine.state.phase, 'tutorial', 'player walls no longer expose separate tutorial-complete buttons');
   engine.handleTouchFrame(touchFrame([floorTouchEvent(86, 'down', 0.5, 0.85)], [86]));

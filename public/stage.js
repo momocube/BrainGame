@@ -2,7 +2,7 @@ import { CAD_SCENE, PROJECTION_CANVAS, calculateProjectionFit } from './projecti
 
 import { renderPerspectiveSceneSvg } from './map-scene.mjs';
 import { getGameTutorial } from './tutorial-content.mjs';
-import { compareStageStateFreshness, stageStructureKey } from './stage-rendering.mjs';
+import { compareStageStateFreshness, scoreboardColumnCount, stageStructureKey } from './stage-rendering.mjs';
 
 const $ = (selector) => document.querySelector(selector);
 const venueWidth = CAD_SCENE.width, venueHeight = CAD_SCENE.height;
@@ -15,6 +15,7 @@ const gameNames = {
 };
 let state;
 let lastRenderedStructureKey = null;
+const lastSequenceWrongCount = new Map();
 const floor = $('#floor');
 
 function updateVenueScale() {
@@ -43,7 +44,7 @@ function setTextIfChanged(node, value) {
   if (node && node.textContent !== value) node.textContent = value;
 }
 
-function renderSharedMenuZone(zone, option, index, total) {
+function renderSharedMenuZone(zone, option, index, total, data) {
   if (!option) return null;
   const node = el('section', 'zone shared-menu-zone');
   node.dataset.menuZoneId = zone.id;
@@ -60,8 +61,19 @@ function renderSharedMenuZone(zone, option, index, total) {
   const tile = el('div', `shared-game-tile${option.id === 'random' ? ' random-game' : ''}`);
   tile.append(el('strong', '', option.name));
   tile.append(el('small', '', option.id === 'random' ? '全體共同抽選一款遊戲' : `全體共同遊玩・${option.rounds} 輪`));
-  tile.append(el('span', 'shared-game-prompt', '觸碰此區域選擇'));
-  body.append(tile); content.append(header, body); inner.append(content); node.append(inner);
+  tile.append(el('span', 'shared-game-prompt', data.phase === 'lobby' ? '觸碰此區域選擇' : '全場確認中'));
+  body.append(tile); content.append(header, body);
+  if (data.phase === 'game_preview' && option.id === data.selectedGame) {
+    const mask = el('div', 'shared-preview-wall-mask');
+    mask.setAttribute('aria-hidden', 'true');
+    const confirm = el('div', 'shared-preview-wall-action shared-preview-wall-confirm');
+    confirm.append(el('strong', '', '確定'), el('small', '', '進入教學'));
+    const cancel = el('div', 'shared-preview-wall-action shared-preview-wall-cancel');
+    cancel.append(el('strong', '', '取消'), el('small', '', '返回選單'));
+    mask.append(confirm, cancel);
+    content.append(mask);
+  }
+  inner.append(content); node.append(inner);
   return node;
 }
 
@@ -98,7 +110,7 @@ function renderZone(zone, view, data) {
   if (data.phase === 'game_preview') {
     header.append(el('div', 'zone-head', gameNames[data.selectedGame] ?? '小遊戲'));
     body.classList.add('game-preview-body');
-    body.append(el('div', 'game-preview-copy', '請全體到地板中央共同確認，或返回共用選單。'));
+    body.append(el('div', 'game-preview-copy', '請在所選遊戲牆面觸碰圓形「確定」或「取消」按鈕。'));
     return node;
   }
   if (data.phase === 'countdown') {
@@ -114,6 +126,9 @@ function renderZone(zone, view, data) {
     body.classList.add('zone-body-centered'); return node;
   }
   const round = data.currentRound, q = round.question ?? {};
+  const sequenceWrongCount = panel.sequence?.wrongCount ?? 0;
+  const flashSequenceError = round.gameId === 'memory_sequence' && sequenceWrongCount > (lastSequenceWrongCount.get(zone.id) ?? 0);
+  if (round.gameId === 'memory_sequence') lastSequenceWrongCount.set(zone.id, sequenceWrongCount);
   const gameConfig = data.gameRules?.games?.[round.gameId] ?? {};
   const timer = round.gameId === 'memory_poker' ? pokerPhase(round.elapsedMs, gameConfig)
     : round.gameId === 'memory_sequence' ? sequencePhase(round, gameConfig) : secondsLeft(round.limitMs - round.elapsedMs);
@@ -137,14 +152,20 @@ function renderZone(zone, view, data) {
   const isDone = panel.done || panel.eliminated;
   if (isDone) {
     body.classList.add('zone-body-centered');
-    body.append(el('div', 'floor-title', panel.eliminated ? '本輪結束' : '完成'), el('div', 'compact-info', '等待其他玩家')); return node;
+    body.append(el('div', 'floor-title', panel.eliminated ? '本輪結束' : '完成'), el('div', 'compact-info', '等待其他玩家'));
+    if (flashSequenceError && panel.eliminated) {
+      const flash = el('div', 'sequence-wrong-flash sequence-wrong-flash-zone');
+      flash.setAttribute('aria-hidden', 'true');
+      node.append(flash);
+    }
+    return node;
   }
   if (round.gameId === 'minesweeper') renderMineZone(body, panel.mine, q);
   else if (round.gameId === 'zero_sum_grid' || round.gameId === 'cube_count') renderKeypad(body, data.gameRules?.common?.layout, panel.entry, panel.lockRemainingMs);
   else if (round.gameId === 'solid_puzzle') renderChoices(body, q.choices ?? [], panel.selection, 'piece', panel.choiceOrder);
   else if (round.gameId === 'map_view') renderMapPlayer(body, q, panel.selection, gameConfig);
   else if (round.gameId === 'memory_poker') renderPokerZone(body, panel, q, round.elapsedMs, gameConfig);
-  else if (round.gameId === 'memory_sequence') renderSequenceZone(body, panel.sequence, round);
+  else if (round.gameId === 'memory_sequence') renderSequenceZone(body, panel.sequence, round, false, flashSequenceError);
   if (panel.error) header.append(el('div', 'zone-feedback', panel.error));
   return node;
 }
@@ -248,7 +269,7 @@ function renderPokerZone(body, panel, q, elapsedMs, config) {
   if (!memory && elapsedMs < selectionEnd) body.append(el('div', 'ready-button confirm-button poker-confirm', panel.locked ? '已確認' : '選滿兩張後按確認'));
 }
 
-function renderSequenceZone(body, sequence = {}, round, forceReveal = false) {
+function renderSequenceZone(body, sequence = {}, round, forceReveal = false, flashWrong = false) {
   const memoryMs = (round.question?.memorySeconds ?? 0) * 1000;
   const memory = forceReveal || round.elapsedMs < memoryMs;
   const values = sequence.values ?? Array(80).fill(0);
@@ -258,7 +279,14 @@ function renderSequenceZone(body, sequence = {}, round, forceReveal = false) {
     if (memory || values[i] > 0) { cell.classList.add('open'); cell.textContent = values[i] ? String(values[i]) : ''; }
     grid.append(cell);
   }
-  body.append(grid);
+  const board = el('div', 'sequence-board-wrap');
+  board.append(grid);
+  if (!forceReveal && flashWrong) {
+    const flash = el('div', 'sequence-wrong-flash');
+    flash.setAttribute('aria-hidden', 'true');
+    board.append(flash);
+  }
+  body.append(board);
 }
 
 function renderZoneResult(header, body, panel, data) {
@@ -294,7 +322,7 @@ function sequencePhase(round, config) {
 
 function renderFloor(data) {
   floor.replaceChildren();
-  floor.classList.toggle('shared-floor-controls-active', ['game_preview', 'tutorial'].includes(data.phase));
+  floor.classList.toggle('shared-floor-controls-active', data.phase === 'tutorial');
   if (data.phase === 'lobby') {
     const joined = data.layout?.participantCount ?? 0;
     const box = el('div', 'shared-floor-screen shared-lobby-floor');
@@ -308,11 +336,8 @@ function renderFloor(data) {
     const box = el('div', 'shared-floor-screen shared-preview-floor');
     box.append(el('div', 'floor-title', `${gameNames[data.selectedGame] ?? '小遊戲'}・遊戲介紹`));
     box.append(el('div', 'shared-floor-description', `${guide.goal}　${guide.schedule}`));
-    if (data.notice) box.append(el('div', 'shared-floor-notice', data.notice));
-    const controls = el('div', 'shared-floor-controls');
-    controls.append(el('div', 'shared-floor-action shared-preview-confirm', '確定・進入教學'));
-    controls.append(el('div', 'shared-floor-action shared-preview-cancel', '取消・返回共用選單'));
-    box.append(controls);
+    box.append(el('div', 'shared-floor-notice', '請在牆面所選遊戲上，觸碰圓形「確定」或「取消」按鈕。'));
+    if (data.notice) box.append(el('div', 'shared-floor-notice staff-preview-notice', data.notice));
     floor.append(box);
     return;
   }
@@ -412,7 +437,7 @@ function renderQuestionPanel(panel, data) {
   } else if (data.phase === 'lobby') {
     showTitle('全場共用遊戲選單', '請在周圍牆面共同選擇一款遊戲', content);
   } else if (data.phase === 'game_preview') {
-    showTitle(`${gameNames[data.selectedGame] ?? '小遊戲'}・遊戲介紹`, '請全體到地板中央共同確認或返回選單。', content);
+    showTitle(`${gameNames[data.selectedGame] ?? '小遊戲'}・遊戲介紹`, '請在所選遊戲牆面觸碰圓形「確定」或「取消」按鈕。', content);
   } else {
     renderQuestionDisplay(data, content);
   }
@@ -420,9 +445,13 @@ function renderQuestionPanel(panel, data) {
 }
 
 function renderPlayerProgress(data, target) {
-  showTitle('本輪玩家進度', `${gameNames[data.currentRound?.gameId] ?? ''}・第 ${data.currentRound?.round ?? ''} 輪`, target);
-  const grid = el('div', 'result-grid');
-  for (const zoneId of data.currentRound?.participantIds ?? []) {
+  const wrap = el('div', 'floor-stack scoreboard-screen');
+  wrap.append(el('div', 'floor-title', '本輪玩家進度'));
+  wrap.append(el('div', 'floor-subtitle', `${gameNames[data.currentRound?.gameId] ?? ''}・第 ${data.currentRound?.round ?? ''} 輪`));
+  const grid = el('div', 'result-grid scoreboard');
+  const participantIds = data.currentRound?.participantIds ?? [];
+  grid.style.gridTemplateColumns = `repeat(${scoreboardColumnCount(participantIds.length)}, minmax(0, 1fr))`;
+  for (const zoneId of participantIds) {
     const player = data.playerViews?.[zoneId] ?? {};
     const status = player.eliminated ? '本輪淘汰' : player.done ? '已完成' : '進行中';
     const item = el('div', 'result-person');
@@ -430,20 +459,26 @@ function renderPlayerProgress(data, target) {
     item.append(el('small', '', `累積 ${(player.score ?? 0).toFixed(1)} 分${player.error ? `・${player.error}` : ''}`));
     grid.append(item);
   }
-  target.append(grid);
+  wrap.append(grid);
+  target.append(wrap);
 }
 
 function renderRoundStandings(data, target) {
   const result = data.results?.[0];
-  showTitle(`${result?.gameName ?? ''}・第 ${result?.round ?? ''} 輪結算`, '答題區顯示本輪解答；以下為名次與加分', target);
-  const grid = el('div', 'result-grid');
-  for (const row of [...(result?.rows ?? [])].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))) {
+  const wrap = el('div', 'floor-stack scoreboard-screen');
+  wrap.append(el('div', 'floor-title', `${result?.gameName ?? ''}・第 ${result?.round ?? ''} 輪結算`));
+  wrap.append(el('div', 'floor-subtitle', '答題區顯示本輪解答；以下為名次與加分'));
+  const grid = el('div', 'result-grid scoreboard');
+  const rows = [...(result?.rows ?? [])].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999));
+  grid.style.gridTemplateColumns = `repeat(${scoreboardColumnCount(rows.length)}, minmax(0, 1fr))`;
+  for (const row of rows) {
     const item = el('div', 'result-person');
     item.append(el('strong', '', `${row.rank ? `第 ${row.rank} 名` : '未完成'}・${row.zoneId}`));
     item.append(el('small', '', `${row.completed ? '完成' : '未完成'}　+${row.score} 分`));
     grid.append(item);
   }
-  target.append(grid);
+  wrap.append(grid);
+  target.append(wrap);
 }
 function renderMineSolution(q = {}) {
   const wrap = el('div', 'floor-stack');
@@ -668,18 +703,22 @@ function renderMapFirstPerson(q = {}) {
 }
 function renderRoundResult(data, target = floor) {
   const result = data.results?.[0];
-  const wrap = el('div', 'floor-stack');
+  const wrap = el('div', 'floor-stack round-results-screen');
   wrap.append(el('div', 'floor-title', `${result?.gameName ?? ''}・第 ${result?.round ?? ''} 輪結算`));
   const round = data.currentRound, q = round?.question ?? {};
-  if (result?.gameId === 'minesweeper') wrap.append(renderMineSolution(q));
-  else if (result?.gameId === 'zero_sum_grid') wrap.append(renderZeroGrid(q, result.answer));
-  else if (result?.gameId === 'cube_count') wrap.append(renderCubeViews(q, result.answer, data.gameRules?.games?.cube_count));
-  else if (result?.gameId === 'solid_puzzle') wrap.append(renderPuzzleFloor(q, result.answer));
-  else if (result?.gameId === 'memory_poker') wrap.append(renderPokerFloor(round));
-  else if (result?.gameId === 'map_view') wrap.append(renderMapFloor(q, result.answer));
-  else if (result?.gameId === 'memory_sequence') wrap.append(el('div', 'floor-subtitle', '請查看牆面，揭露本區數字順序與本輪最佳進度'));
-  const grid = el('div', 'result-grid');
-  for (const row of [...(result?.rows ?? [])].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))) {
+  const answerPanel = el('div', 'round-result-question');
+  if (result?.gameId === 'minesweeper') answerPanel.append(renderMineSolution(q));
+  else if (result?.gameId === 'zero_sum_grid') answerPanel.append(renderZeroGrid(q, result.answer));
+  else if (result?.gameId === 'cube_count') answerPanel.append(renderCubeViews(q, result.answer, data.gameRules?.games?.cube_count));
+  else if (result?.gameId === 'solid_puzzle') answerPanel.append(renderPuzzleFloor(q, result.answer));
+  else if (result?.gameId === 'memory_poker') answerPanel.append(renderPokerFloor(round));
+  else if (result?.gameId === 'map_view') answerPanel.append(renderMapFloor(q, result.answer));
+  else if (result?.gameId === 'memory_sequence') answerPanel.append(el('div', 'floor-subtitle', '請查看牆面，揭露本區數字順序與本輪最佳進度'));
+  wrap.append(answerPanel);
+  const grid = el('div', 'result-grid scoreboard');
+  const rows = [...(result?.rows ?? [])].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999));
+  grid.style.gridTemplateColumns = `repeat(${scoreboardColumnCount(rows.length)}, minmax(0, 1fr))`;
+  for (const row of rows) {
     const item = el('div', 'result-person');
     item.append(el('strong', '', `${row.rank ? `第 ${row.rank} 名` : '未完成'}・${row.zoneId}`));
     item.append(el('small', '', `${row.completed ? '完成' : '未完成'}　+${row.score} 分`)); grid.append(item);
@@ -688,8 +727,10 @@ function renderRoundResult(data, target = floor) {
 }
 function renderFinalResult(data, target = floor) {
   const wrap = el('div', 'floor-stack'); wrap.append(el('div', 'floor-title', '本場總成績'));
-  const grid = el('div', 'result-grid');
-  for (const row of data.finalRankings ?? []) {
+  const grid = el('div', 'result-grid scoreboard');
+  const rankings = data.finalRankings ?? [];
+  grid.style.gridTemplateColumns = `repeat(${scoreboardColumnCount(rankings.length)}, minmax(0, 1fr))`;
+  for (const row of rankings) {
     const item = el('div', 'result-person'); item.append(el('strong', '', `第 ${row.rank} 名・${row.zoneId}`));
     item.append(el('small', '', `${row.score} 分　完成 ${row.roundsPlayed} 輪`)); grid.append(item);
   }
@@ -713,10 +754,10 @@ function render(data) {
   }
   const views = data.playerViews ?? {};
   const zones = $('#zones'); zones.replaceChildren();
-  if (data.phase === 'lobby') {
+  if (data.phase === 'lobby' || data.phase === 'game_preview') {
     const options = [...(data.availableGames ?? []), { id: 'random', name: '隨機遊戲', rounds: null }];
     for (const [index, zone] of (data.menuZones ?? []).entries()) {
-      const node = renderSharedMenuZone(zone, options[index], index, options.length);
+      const node = renderSharedMenuZone(zone, options[index], index, options.length, data);
       if (node) zones.append(node);
     }
   } else {

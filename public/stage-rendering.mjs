@@ -15,3 +15,9 @@ export function compareStageStateFreshness(next, current) {
   if (!Number.isFinite(nextAt) || !Number.isFinite(currentAt)) return 0;
   return Math.sign(nextAt - currentAt);
 }
+
+/** Keep enlarged score entries readable by giving each one enough grid width. */
+export function scoreboardColumnCount(itemCount) {
+  const count = Number.isFinite(itemCount) ? Math.max(0, Math.floor(itemCount)) : 0;
+  return Math.max(1, Math.ceil(Math.sqrt(count)));
+}
