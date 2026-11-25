@@ -63,6 +63,7 @@ export function validatePlayerZoneConfig(layout, touchProfile) {
 
   const ignoredFaces = new Set(layout.ignoredFaces ?? []);
   const decorativeFaces = new Set(layout.decorativeFaces ?? []);
+  const controlFaces = new Set(layout.controlFaces ?? []);
   const faceRects = touchProfile.faces.map((face) => faceCadRect(face, touchProfile));
   const playerIds = new Set();
   const displayRects = [];
@@ -70,6 +71,7 @@ export function validatePlayerZoneConfig(layout, touchProfile) {
   const exitControl = layout.sharedExitControl;
   if (exitControl && (!Number.isInteger(exitControl.face) || !faceRects[exitControl.face] ||
       ignoredFaces.has(exitControl.face) || decorativeFaces.has(exitControl.face) ||
+      ![0, 180].includes(exitControl.rotationDegrees ?? 0) ||
       !validRect(exitControl.rect) || !inside(exitControl.rect, faceRects[exitControl.face]))) {
     throw layoutError('共用退出按鈕必須位於有效牆面空白區');
   }
@@ -104,8 +106,8 @@ export function validatePlayerZoneConfig(layout, touchProfile) {
       if (!Number.isInteger(source.face) || source.face < 0 || source.face >= touchProfile.faces.length) {
         throw layoutError(`${player.id} 的 TouchService face 無效`);
       }
-      if (ignoredFaces.has(source.face) || decorativeFaces.has(source.face)) {
-        throw layoutError(`${player.id} 不可使用忽略或裝飾用 face ${source.face}`);
+      if (ignoredFaces.has(source.face) || decorativeFaces.has(source.face) || controlFaces.has(source.face)) {
+        throw layoutError(`${player.id} 不可使用忽略或裝飾用 face 或共用控制面 ${source.face}`);
       }
       const rect = { x: source.x, y: source.y, width: source.width, height: source.height };
       if (!validRect(rect) || !inside(rect, faceRects[source.face])) {
@@ -163,7 +165,7 @@ export function validatePlayerZoneConfig(layout, touchProfile) {
             !inside(panel.rect, faceRects[panel.face])) {
           throw layoutError(`${panel.id} 題目顯示區超出有效 CAVE 顯示面`);
         }
-        if (ignoredFaces.has(panel.face) || decorativeFaces.has(panel.face)) {
+        if (ignoredFaces.has(panel.face) || decorativeFaces.has(panel.face) || controlFaces.has(panel.face)) {
           throw layoutError(`${panel.id} 題目顯示區不可使用忽略或裝飾用 face ${panel.face}`);
         }
         for (const previous of occupiedRects) {

@@ -1,6 +1,6 @@
 const volatileStageFields = new Set([
   'updatedAt', 'sessionElapsedMs', 'remainingSessionMs', 'countdownMs',
-  'elapsedMs', 'resultRemainingMs', 'lockRemainingMs'
+  'elapsedMs', 'resultRemainingMs', 'lockRemainingMs', 'tutorialHold'
 ]);
 
 /** Keep stable stage content rendered while timers and lock countdowns advance. */

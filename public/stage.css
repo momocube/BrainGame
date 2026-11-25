@@ -166,8 +166,11 @@
 .shared-floor-controls{position:absolute;left:0;top:76%;width:100%;height:18%;display:grid;grid-template-columns:1fr 1fr;gap:0}
 .shared-floor-action{display:grid;place-items:center;padding:10px 18px;border:3px solid var(--zone-action-border);background:var(--zone-action);color:var(--zone-action-text);font-size:32px;font-weight:900;line-height:1.2}
 .shared-preview-cancel{border-color:var(--zone-cell-border);background:var(--zone-cell);color:#eaf3ff}
-.shared-tutorial-controls{left:25%;width:50%;grid-template-columns:1fr}
-.shared-tutorial-complete{border-color:#80e3d8;background:#155c5c;color:#f3fffd;font-size:38px}
+.shared-tutorial-controls{left:50%;top:50%;transform:translate(-50%,-50%);grid-template-columns:1fr;border-radius:50%}
+.shared-tutorial-complete{position:relative;width:100%;height:100%;border:4px solid #80e3d8;border-radius:50%;padding:28px;background:conic-gradient(#ffdc67 var(--hold-progress,0%),#254b59 0);color:#f3fffd;font-size:60px}
+.tutorial-hold-content{width:100%;height:100%;border-radius:50%;background:#104c50;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px}
+.tutorial-hold-time{font-size:38px;color:#ffecad;font-variant-numeric:tabular-nums}
+.tutorial-hold-content small{font-size:25px;color:#d3f4ed}
 .tutorial-body{grid-template-rows:minmax(0,1fr) 62px;gap:8px}
 .tutorial-shared-hint{display:grid;place-items:center;padding:8px;border:1px solid var(--zone-cell-border);background:var(--zone-cell);color:#d8e4f3;font-size:18px;font-weight:800}
 .game-preview-body{grid-template-rows:minmax(0,1fr);padding:12px 16px}
@@ -216,11 +219,21 @@
 #venue.mouse-test-enabled{cursor:pointer;user-select:none;touch-action:none}
 
 .shared-exit-control{position:absolute;z-index:3;background:#111d2d;border-inline:2px solid #52657b;box-sizing:border-box;overflow:hidden}
-.shared-exit-button{position:absolute;box-sizing:border-box;display:flex;align-items:center;justify-content:center;writing-mode:vertical-rl;text-orientation:upright;letter-spacing:2px;font-size:26px;font-weight:900;line-height:1;white-space:nowrap;border:3px solid #be8b6f;border-radius:12px;background:#57342a;color:#fff0e2;user-select:none}
+.shared-exit-button{position:absolute;box-sizing:border-box;display:flex;align-items:center;justify-content:center;letter-spacing:2px;font-size:38px;font-weight:900;line-height:1;white-space:nowrap;border:3px solid #be8b6f;border-radius:12px;background:#57342a;color:#fff0e2;user-select:none}
 .shared-exit-request{font-size:32px;letter-spacing:8px}
 .shared-exit-control.confirming{background:#101923;border-color:#d4b06b}
-.shared-exit-title,.shared-exit-note{position:absolute;left:0;width:100%;display:flex;align-items:center;justify-content:center;writing-mode:vertical-rl;text-orientation:upright;line-height:1;letter-spacing:4px;font-weight:800;white-space:nowrap}
-.shared-exit-title{top:8px;height:128px;font-size:26px;color:#fff0d6}
-.shared-exit-note{top:152px;height:80px;font-size:18px;letter-spacing:1px;color:#bad4c3}
+.shared-exit-title,.shared-exit-note{position:absolute;left:0;width:100%;display:flex;align-items:center;justify-content:center;line-height:1;letter-spacing:4px;font-weight:800;white-space:nowrap}
+.shared-exit-title{top:8px;height:128px;font-size:38px;color:#fff0d6}
+.shared-exit-note{top:152px;height:80px;font-size:30px;letter-spacing:1px;color:#bad4c3}
 .shared-exit-confirm{background:#782e35;border-color:#f18b91}
 .shared-exit-cancel{background:#1a4d4c;border-color:#72d8c7}
+.puzzle-legend{font-size:26px;font-weight:800;color:#ffdc67;text-align:center}
+.poker-public-display .card-row{width:100%;height:75%;min-height:0;gap:3%;align-items:center;flex:none}
+/* Oversized public cards keep all three ranks and suits visible together. */
+.poker-public-display .public-card{width:540px;max-width:30%;height:auto;max-height:100%;aspect-ratio:2/3;flex:0 1 540px;border:4px solid #c0cee0;border-radius:24px;background:#fffdf6;color:#111d32;overflow:hidden;box-shadow:0 12px 28px #0008}
+.poker-public-display .public-card.red{color:#c51638}
+.public-card svg{display:block;width:100%;height:100%;fill:currentColor;font-family:"Segoe UI Symbol","Microsoft JhengHei",sans-serif;font-weight:900}
+.question-content .public-card{border-radius:14px;border-width:3px}
+.question-content .poker-public-display{padding:2%}
+.question-content .poker-public-display .card-row{gap:2%}
+.question-content .poker-public-display .public-card{max-width:32%}

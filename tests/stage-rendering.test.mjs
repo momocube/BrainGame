@@ -13,6 +13,7 @@ test('stage structure key ignores timer-only updates but detects player and ques
   timerUpdate.updatedAt = 'second';
   timerUpdate.currentRound.elapsedMs = 2_000;
   timerUpdate.playerViews.P1.lockRemainingMs = 500;
+  timerUpdate.tutorialHold = { active: true, heldMs: 500, requiredMs: 1000 };
 
   assert.equal(stageStructureKey(initial), stageStructureKey(timerUpdate));
 

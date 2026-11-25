@@ -135,11 +135,18 @@ test('4-player question panels are output-only and stay clear of touch zones and
 
 test('shared exit strip occupies a fixed real wall gap for every player layout', () => {
   const control = layout.sharedExitControl;
-  assert.deepEqual(control.rect, { x: 640, y: 0, width: 64, height: 640 });
-  assert.equal(control.face, 0);
+  assert.deepEqual(control.rect, { x: 640, y: 2048, width: 256, height: 640 });
+  assert.equal(control.face, 6);
+  assert.equal(touchProfile.faces[control.face].name, 'Wall Right little');
+  assert.equal(control.rotationDegrees, 180);
+  assert.deepEqual({ x: control.rect.y, y: 3328 - control.rect.x - control.rect.width,
+    width: control.rect.height, height: control.rect.width },
+  { x: 2048, y: 2432, width: 640, height: 256 }, 'maps onto the native east small wall');
+  assert.equal((control.rotationDegrees + 270) % 360, 90, 'east wall text faces the same direction as P8');
   assert.equal(validatePlayerZoneConfig(layout, touchProfile), true);
   const overlap = structuredClone(layout);
-  overlap.sharedExitControl.rect.x = 704;
+  overlap.sharedExitControl.face = 0;
+  overlap.sharedExitControl.rect = { x: 704, y: 0, width: 64, height: 640 };
   assert.throws(() => validatePlayerZoneConfig(overlap, touchProfile), /退出按鈕.*重疊/);
   const wrongFace = structuredClone(layout);
   wrongFace.sharedExitControl.face = 5;

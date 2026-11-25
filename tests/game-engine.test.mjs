@@ -1484,12 +1484,12 @@ test('hold gestures are cancelled by a flow change even if the same phase return
   engine.selectGame('minesweeper');
   engine.confirmGameSelection();
 
-  engine.handleTouchFrame(touchFrame([floorTouchEvent(54, 'down', 0.5, 0.85)], [54]));
+  engine.handleTouchFrame(touchFrame([floorTouchEvent(54, 'down', 0.5, 0.5)], [54]));
   engine.contacts.get('54').started -= rules.common.readyHoldSeconds * 1_000 + 200;
   engine.returnToLobby();
   engine.selectGame('minesweeper');
   engine.confirmGameSelection();
-  engine.handleTouchFrame(touchFrame([floorTouchEvent(54, 'up', 0.5, 0.85)], []));
+  engine.handleTouchFrame(touchFrame([floorTouchEvent(54, 'up', 0.5, 0.5)], []));
 
   assert.equal(engine.state.phase, 'tutorial');
   assert.equal(engine.state.participants.P1.ready, false,
@@ -1508,7 +1508,7 @@ test('staff joins a player, who can choose, prepare, start and answer through To
   engine.handleTouchFrame(touchFrame([menuTouchEvent(83, 'down', 0.25, 0.6, confirmZone.id, engine)], [83]));
   assert.equal(engine.state.phase, 'tutorial');
 
-  const readyPoint = { u: 0.5, v: 0.85 };
+  const readyPoint = { u: 0.5, v: 0.5 };
   engine.handleTouchFrame(touchFrame([floorTouchEvent(84, 'down', readyPoint.u, readyPoint.v)], [84]));
   engine.contacts.get('84').started -= rules.common.readyHoldSeconds * 1_000 + 200;
   engine.handleTouchFrame(touchFrame([floorTouchEvent(84, 'up', readyPoint.u, readyPoint.v)], []));
@@ -1632,9 +1632,9 @@ test('game preview can be cancelled, and one player can complete the shared tuto
   assert.equal(engine.state.phase, 'tutorial', 'the circular control on the selected wall opens the fixed tutorial');
   engine.coordinateAction('P1', 0.5, 0.85, 5_000);
   assert.equal(engine.state.phase, 'tutorial', 'player walls no longer expose separate tutorial-complete buttons');
-  engine.handleTouchFrame(touchFrame([floorTouchEvent(86, 'down', 0.5, 0.85)], [86]));
+  engine.handleTouchFrame(touchFrame([floorTouchEvent(86, 'down', 0.5, 0.5)], [86]));
   engine.contacts.get('86').started -= rules.common.readyHoldSeconds * 1_000 + 200;
-  engine.handleTouchFrame(touchFrame([floorTouchEvent(86, 'up', 0.5, 0.85)], []));
+  engine.handleTouchFrame(touchFrame([floorTouchEvent(86, 'up', 0.5, 0.5)], []));
   assert.equal(engine.state.phase, 'countdown', 'one completed tutorial hold starts the three-second countdown');
   assert.equal(engine.state.currentRound.gameId, 'memory_poker');
   assert.deepEqual(engine.state.currentRound.participantIds, ['P1', 'P2'], 'one shared floor hold prepares every player');
@@ -1739,7 +1739,7 @@ test('mouse testing selects any shared wall and handles real-duration holds and 
   mouse(menuTouchEvent(1, 'down', 0.25, 0.6, 'P3', engine));
   assert.equal(engine.state.phase, 'tutorial');
   mouse({ phase: 'cancel' });
-  const hold = floorTouchEvent(1, 'down', 0.5, 0.85);
+  const hold = floorTouchEvent(1, 'down', 0.5, 0.5);
   engine.touchReleaseTimeoutMs = 170;
   mouse(hold); now += 500; mouse({ ...hold, phase: 'up' });
   assert.equal(engine.state.phase, 'tutorial', 'short clicks do not complete teaching');
@@ -1778,9 +1778,50 @@ test('mouse input hits numeric keys across player layouts and ignores stale phas
 function exitTouchEvent(id, phase, action, u = 0.5) {
   const r = zones.sharedExitControl.rect;
   const button = EXIT_BUTTONS[action];
+  const v = button.y + button.height / 2;
+  const rotated = zones.sharedExitControl.rotationDegrees === 180;
   return { id, phase, face: zones.sharedExitControl.face,
-    px: [r.y + (button.y + button.height / 2) * r.height, 3328 - (r.x + u * r.width)] };
+    px: [r.y + (rotated ? 1 - v : v) * r.height, 3328 - (r.x + (rotated ? 1 - u : u) * r.width)] };
 }
+
+test('east small wall exit rejects the old wall and reverses touch coordinates to match its text', () => {
+  const engine = createEngine('cube_count');
+  assert.equal(engine.canvasPosition(0, [320, 3328 - 672]), null);
+  const point = exitTouchEvent(1, 'down', 'confirm', 0.25);
+  const mapped = engine.canvasPosition(6, point.px);
+  assert.equal(mapped.zoneId, EXIT_CONTROL_ZONE);
+  assert.equal(mapped.u, 0.25);
+  assert.equal(mapped.v, EXIT_BUTTONS.confirm.y + EXIT_BUTTONS.confirm.height / 2);
+  assert.equal(engine.canvasPosition(5, point.px), null);
+});
+
+test('tutorial circle reports hold duration and cancels on leaving the circle, release or mouse blur', () => {
+  const engine = new GameEngine({ rules, zones, onSave() {} });
+  startReadySession(engine); engine.join('P1'); engine.selectGame('minesweeper'); engine.confirmGameSelection();
+  let now = 0; engine.clock = () => now; engine.lastTick = now;
+  engine.touchReleaseTimeoutMs = 170;
+  const send = (phase, u, v) => engine.handleTouchFrame(touchFrame([floorTouchEvent(91, phase, u, v)], phase === 'up' ? [] : [91]));
+  send('down', 0.5, 0.5); now = 670;
+  assert.deepEqual(engine.snapshot().tutorialHold, { active: true, heldMs: 500, requiredMs: rules.common.readyHoldSeconds * 1000 });
+  send('move', 0.37, 0.31); // Inside the circle's bounding box, outside its round boundary.
+  assert.equal(engine.snapshot().tutorialHold.active, false);
+  send('move', 0.5, 0.5); now = 4000; send('up', 0.5, 0.5);
+  assert.equal(engine.state.phase, 'tutorial', 'moving back into the circle cannot restore a cancelled hold');
+  send('down', 0.5, 0.85); now += 2000; send('up', 0.5, 0.85);
+  assert.equal(engine.state.phase, 'tutorial', 'the previous rectangular button is no longer interactive');
+  engine.mouseTestEnabled = true;
+  const mouse = (phase) => handleMouseInput(engine, { ...floorTouchEvent(1, phase, 0.5, 0.5), phaseRevision: engine.phaseRevision }, 'progress-test');
+  mouse('down'); now += 500;
+  assert.equal(engine.snapshot().tutorialHold.heldMs, 500, 'mouse progress has no physical sensor release delay');
+  mouse('cancel');
+  assert.equal(engine.snapshot().tutorialHold.active, false);
+  assert.equal(engine.snapshot().tutorialHold.heldMs, 0);
+  mouse('down'); now += 200; mouse('up');
+  assert.equal(engine.state.phase, 'tutorial', 'short press resets progress');
+  mouse('down'); now += rules.common.readyHoldSeconds * 1000; mouse('up');
+  assert.equal(engine.state.phase, 'countdown');
+  assert.equal(engine.snapshot().tutorialHold.active, false);
+});
 
 for (const gameId of GAME_IDS) {
   test(`${gameId}: shared wall exit needs confirmation and keeps settled rankings`, () => {

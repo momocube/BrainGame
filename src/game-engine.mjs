@@ -3,6 +3,7 @@ import { resolvePlayerLayout } from './player-layouts.mjs';
 import { cubeColumnsAreReadable } from './cube-visibility.mjs';
 import { validateGameRules } from './game-rules.mjs';
 import { EXIT_CONTROL_ZONE, EXIT_CONFIRM_HOLD_MS, EXIT_BUTTONS, canPlayerExit, exitActionAt } from '../public/exit-control.mjs';
+import { tutorialHoldTarget } from '../public/tutorial-control.mjs';
 
 const GAME_ORDER = [
   'minesweeper', 'zero_sum_grid', 'cube_count', 'solid_puzzle',
@@ -781,6 +782,13 @@ export class GameEngine {
     state.input = { ready: this.inputsReady, detail: this.inputDetail,
       mouseTest: Boolean(this.mouseTestEnabled), phaseRevision: this.phaseRevision };
     state.sharedExitControl = structuredClone(this.zoneConfig.sharedExitControl ?? null);
+    const tutorialContacts = this.state.phase === 'tutorial' ? [...this.contacts.values()].filter((contact) =>
+      !contact.cancelled && contact.phaseRevision === this.phaseRevision && contact.holdTarget?.kind === 'complete-tutorial') : [];
+    state.tutorialHold = {
+      active: tutorialContacts.length > 0,
+      heldMs: Math.max(0, ...tutorialContacts.map((contact) => this.clock() - contact.started - (contact.releaseDelayMs ?? 0))),
+      requiredMs: this.rules.common.readyHoldSeconds * 1000
+    };
     state.remainingSessionMs = Math.max(0, this.rules.common.sessionDurationSeconds * 1000 - state.sessionElapsedMs);
     state.remainingRoundMs = this.state.phase === 'playing' && this.state.currentRound
       ? Math.max(0, this.state.currentRound.limitMs - this.state.currentRound.elapsedMs) : null;
@@ -1267,7 +1275,7 @@ export class GameEngine {
     }
     if (zoneId === 'FLOOR') {
       if (phase === 'tutorial' &&
-          this.pointInsideHoldTarget({ x: 0.25, y: 0.76, width: 0.5, height: 0.18 }, { u, v }) &&
+          this.pointInsideHoldTarget(tutorialHoldTarget(this.layout.floorRect.rect), { u, v }) &&
           heldMs >= this.rules.common.readyHoldSeconds * 1000) {
         this.recordPlayerInput(null, { type: 'complete-tutorial' }, { phase: 'tutorial', relatedZones: [...this.state.participantIds] });
         this.completeSharedTutorial();
@@ -1365,7 +1373,7 @@ export class GameEngine {
         exitActionAt(position.u, position.v, true) === 'confirm') {
       return { phase: 'playing', kind: 'confirm-exit-game', rect: EXIT_BUTTONS.confirm };
     }
-    const rect = { x: 0.25, y: 0.76, width: 0.5, height: 0.18 };
+    const rect = tutorialHoldTarget(this.layout.floorRect.rect);
     if (this.state.phase === 'tutorial' && zoneId === 'FLOOR' && this.pointInsideHoldTarget(rect, position)) {
       return { phase: 'tutorial', kind: 'complete-tutorial', rect };
     }
@@ -1373,6 +1381,11 @@ export class GameEngine {
   }
 
   pointInsideHoldTarget(rect, position) {
+    if (rect.shape === 'circle') {
+      const dx = (position.u - rect.x - rect.width / 2) / (rect.width / 2);
+      const dy = (position.v - rect.y - rect.height / 2) / (rect.height / 2);
+      return dx * dx + dy * dy <= 1;
+    }
     return position.u >= rect.x && position.v >= rect.y &&
       position.u < rect.x + rect.width && position.v < rect.y + rect.height;
   }
@@ -1400,6 +1413,7 @@ export class GameEngine {
           const holdTarget = this.touchHoldTarget(position.zoneId, position);
           const contact = {
             ...position, started: receivedAt, eventElapsedMs: this.activeElapsedAt(receivedAt),
+            releaseDelayMs: this.touchReleaseTimeoutMs,
             holdTarget, phaseRevision: this.phaseRevision,
             requiresHold: Boolean(holdTarget), cancelled: false
           };
@@ -1415,7 +1429,7 @@ export class GameEngine {
         const key = String(event.id), contact = this.contacts.get(key);
         if (!contact) continue;
         this.contacts.delete(key);
-        const duration = Math.max(0, receivedAt - contact.started - this.touchReleaseTimeoutMs);
+        const duration = Math.max(0, receivedAt - contact.started - (contact.releaseDelayMs ?? this.touchReleaseTimeoutMs));
         const up = this.canvasPosition(event.face, event.px);
         if (contact.requiresHold && !contact.cancelled && this.holdTargetStillValid(contact, up) && duration >= 0) {
           effects.push({ ...contact, heldMs: duration });
@@ -1424,6 +1438,7 @@ export class GameEngine {
     }
     const alive = new Set(frame.alive.map(String));
     for (const id of this.contacts.keys()) if (!alive.has(id)) this.contacts.delete(id);
+    if (this.state.phase === 'tutorial') this.changed();
     this.batchDepth++;
     try {
       const zoneTouches = new Map();
@@ -1518,8 +1533,11 @@ export class GameEngine {
     if (exitControl && canPlayerExit(this.state, this.rules.common.sessionDurationSeconds * 1000) &&
         faceIndex === exitControl.face && cadX >= exitControl.rect.x && cadY >= exitControl.rect.y &&
         cadX < exitControl.rect.x + exitControl.rect.width && cadY < exitControl.rect.y + exitControl.rect.height) {
-      return { zoneId: EXIT_CONTROL_ZONE, u: (cadX - exitControl.rect.x) / exitControl.rect.width,
-        v: (cadY - exitControl.rect.y) / exitControl.rect.height };
+      const u = (cadX - exitControl.rect.x) / exitControl.rect.width;
+      const v = (cadY - exitControl.rect.y) / exitControl.rect.height;
+      return { zoneId: EXIT_CONTROL_ZONE,
+        u: exitControl.rotationDegrees === 180 ? 1 - u : u,
+        v: exitControl.rotationDegrees === 180 ? 1 - v : v };
     }
     const floor = this.layout.floorRect;
     if (this.state.phase === 'tutorial' && floor && faceIndex === floor.face &&
@@ -1616,6 +1634,8 @@ export class GameEngine {
         this.save();
         return;
       }
+    } else if (this.state.phase === 'tutorial' && this.contacts.size) {
+      this.changed();
     } else if (this.state.phase === 'countdown') {
       this.state.currentRound.countdownMs -= d;
       if (this.state.currentRound.countdownMs <= 0) {

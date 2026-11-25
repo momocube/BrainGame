@@ -1,6 +1,7 @@
 import { CAD_SCENE, PROJECTION_CANVAS, calculateProjectionFit } from './projection-layout.mjs';
 import { installMouseInput } from './mouse-input.mjs';
 import { EXIT_BUTTONS, canPlayerExit } from './exit-control.mjs';
+import { TUTORIAL_BUTTON_DIAMETER } from './tutorial-control.mjs';
 
 import { renderPerspectiveSceneSvg } from './map-scene.mjs';
 import { getGameTutorial } from './tutorial-content.mjs';
@@ -19,6 +20,24 @@ let state;
 let lastRenderedStructureKey = null;
 const lastSequenceWrongCount = new Map();
 const floor = $('#floor');
+let tutorialProgress = { active: false, heldMs: 0, requiredMs: 1000, receivedAt: 0 };
+
+function paintTutorialProgress() {
+  const button = floor.querySelector('.shared-tutorial-complete');
+  if (!button) return;
+  const hold = tutorialProgress;
+  const elapsed = hold.active ? Math.min(hold.requiredMs, hold.heldMs + Math.min(250, performance.now() - hold.receivedAt)) : 0;
+  const percent = Math.min(100, elapsed / Math.max(1, hold.requiredMs) * 100);
+  button.style.setProperty('--hold-progress', `${percent}%`);
+  button.setAttribute('aria-valuenow', String(Math.floor(percent)));
+  setTextIfChanged(button.querySelector('.tutorial-hold-time'), `${(elapsed / 1000).toFixed(1)} / ${(hold.requiredMs / 1000).toFixed(1)} 秒`);
+  setTextIfChanged(button.querySelector('.tutorial-hold-label'), percent >= 100 ? '放開開始' : '長按開始');
+}
+function animateTutorialProgress() {
+  paintTutorialProgress();
+  requestAnimationFrame(animateTutorialProgress);
+}
+requestAnimationFrame(animateTutorialProgress);
 
 function updateVenueScale() {
   const bounds = projectionCanvas.getBoundingClientRect();
@@ -349,7 +368,16 @@ function renderFloor(data) {
     box.append(el('div', 'floor-title', '教學完成・全體共用'));
     box.append(el('div', 'shared-floor-description', `讀完周圍牆面的操作說明後，任一玩家可在地板中央長踩完成。${guide.schedule}`));
     const controls = el('div', 'shared-floor-controls shared-tutorial-controls');
-    controls.append(el('div', 'shared-floor-action shared-tutorial-complete', `長踩 ${data.gameRules?.common?.readyHoldSeconds ?? 1} 秒・完成教學`));
+    controls.style.width = `${TUTORIAL_BUTTON_DIAMETER}px`;
+    controls.style.height = `${TUTORIAL_BUTTON_DIAMETER}px`;
+    const button = el('div', 'shared-floor-action shared-tutorial-complete');
+    button.setAttribute('role', 'progressbar');
+    button.setAttribute('aria-label', '長按完成教學，全體開始遊戲');
+    button.setAttribute('aria-valuemin', '0'); button.setAttribute('aria-valuemax', '100');
+    const label = el('div', 'tutorial-hold-content');
+    label.append(el('strong', 'tutorial-hold-label', '長按開始'), el('span', 'tutorial-hold-time'),
+      el('small', '', '持續按住・滿圈後放開'));
+    button.append(label); controls.append(button);
     box.append(controls);
     floor.append(box);
     return;
@@ -551,6 +579,7 @@ function createIsometricSvg(cells, options = {}) {
   const occupied = new Set(cells.map((cell) => cell.join(',')));
   const ghost = options.wireframeVoxels ?? [];
   const faces = [];
+  const palette = options.palette ?? { top: '#79ddd0', sideX: '#31869b', sideY: '#24677f', edge: '#153249' };
   const has = (x, y, z) => occupied.has(`${x},${y},${z}`);
   const addFace = (corners, center, fill) => faces.push({
     points: corners.map(project), depth: center[0] * camera[0] + center[1] * camera[1] + center[2] * camera[2], fill
@@ -558,19 +587,19 @@ function createIsometricSvg(cells, options = {}) {
 
   for (const [x, y, z] of cells) {
     if (!has(x, y, z + 1)) addFace(
-      [[x,y,z+1],[x+1,y,z+1],[x+1,y+1,z+1],[x,y+1,z+1]], [x+.5,y+.5,z+1], '#79ddd0'
+      [[x,y,z+1],[x+1,y,z+1],[x+1,y+1,z+1],[x,y+1,z+1]], [x+.5,y+.5,z+1], palette.top
     );
     if (camera[0] >= 0 && !has(x + 1, y, z)) addFace(
-      [[x+1,y,z],[x+1,y+1,z],[x+1,y+1,z+1],[x+1,y,z+1]], [x+1,y+.5,z+.5], '#31869b'
+      [[x+1,y,z],[x+1,y+1,z],[x+1,y+1,z+1],[x+1,y,z+1]], [x+1,y+.5,z+.5], palette.sideX
     );
     if (camera[0] < 0 && !has(x - 1, y, z)) addFace(
-      [[x,y+1,z],[x,y,z],[x,y,z+1],[x,y+1,z+1]], [x,y+.5,z+.5], '#31869b'
+      [[x,y+1,z],[x,y,z],[x,y,z+1],[x,y+1,z+1]], [x,y+.5,z+.5], palette.sideX
     );
     if (camera[1] >= 0 && !has(x, y + 1, z)) addFace(
-      [[x,y+1,z],[x+1,y+1,z],[x+1,y+1,z+1],[x,y+1,z+1]], [x+.5,y+1,z+.5], '#24677f'
+      [[x,y+1,z],[x+1,y+1,z],[x+1,y+1,z+1],[x,y+1,z+1]], [x+.5,y+1,z+.5], palette.sideY
     );
     if (camera[1] < 0 && !has(x, y - 1, z)) addFace(
-      [[x+1,y,z],[x,y,z],[x,y,z+1],[x+1,y,z+1]], [x+.5,y,z+.5], '#24677f'
+      [[x+1,y,z],[x,y,z],[x,y,z+1],[x+1,y,z+1]], [x+.5,y,z+.5], palette.sideY
     );
   }
 
@@ -604,7 +633,7 @@ function createIsometricSvg(cells, options = {}) {
   for (const face of faces) {
     const polygon = document.createElementNS(ns, 'polygon');
     polygon.setAttribute('points', face.points.map(([x, y]) => `${offsetX + (x - minX) * scale},${offsetY + (y - minY) * scale}`).join(' '));
-    polygon.setAttribute('fill', face.fill); polygon.setAttribute('stroke', '#153249'); polygon.setAttribute('stroke-width', '0.135');
+    polygon.setAttribute('fill', face.fill); polygon.setAttribute('stroke', palette.edge); polygon.setAttribute('stroke-width', options.edgeWidth ?? '0.135');
     svg.append(polygon);
   }
 
@@ -620,10 +649,10 @@ function createIsometricSvg(cells, options = {}) {
       svg.append(line);
     }
   };
-  for (const cell of ghost) drawEdges(cornersOf(cell), '#8ef3e7', '1.5', '4 3');
+  for (const cell of ghost) drawEdges(cornersOf(cell), '#ffcf32', '3.5', null);
   if (options.outlineBounds) {
     drawEdges([[0,0,0],[bounds[0],0,0],[0,bounds[1],0],[bounds[0],bounds[1],0],
-      [0,0,bounds[2]],[bounds[0],0,bounds[2]],[0,bounds[1],bounds[2]],[bounds[0],bounds[1],bounds[2]]], '#d4e4f5', '0.6', null, '0.65');
+      [0,0,bounds[2]],[bounds[0],0,bounds[2]],[0,bounds[1],bounds[2]],[bounds[0],bounds[1],bounds[2]]], '#ffffff', '1.5', null, '0.9');
   }
   return svg;
 }
@@ -639,17 +668,36 @@ function renderPuzzleFloor(q = {}, answer = null) {
   wrap.append(createIsometricSvg(solid, {
     azimuthDegrees: 45, elevationDegrees: 35, bounds: target,
     wireframeVoxels: answer ? [] : missing, outlineBounds: true,
+    palette: { top: '#b4e9ff', sideX: '#368cfa', sideY: '#174bad', edge: '#07162f' }, edgeWidth: '1.4',
     viewWidth: 640, viewHeight: 420, margin: 28, className: 'puzzle-target-svg',
     label: '立體外框與待補缺口'
   }));
+  wrap.append(el('div', 'puzzle-legend', answer ? '藍色：完整立體' : '藍色：已有方塊　黃色實線：待補缺口'));
   return wrap;
 }
 function renderPokerFloor(round) {
-  const wrap = el('div', 'floor-stack'); wrap.append(el('div', 'floor-title', '搭配三張公共牌比較五張牌型'));
+  const wrap = el('div', 'floor-stack poker-public-display'); wrap.append(el('div', 'floor-title', '搭配三張公共牌比較五張牌型'));
   const cards = round.question?.community;
   if (cards?.length) {
     const row = el('div', 'card-row');
-    for (const label of cards) { const card = el('div', `public-card${/[♦♥]/.test(label) ? ' red' : ''}`, label); row.append(card); }
+    const suitNames = { '♠': '黑桃', '♥': '紅心', '♦': '方塊', '♣': '梅花' };
+    for (const label of cards) {
+      const suit = label.match(/[♠♥♦♣]/)?.[0] ?? '';
+      const rank = label.replace(/[♠♥♦♣]/g, '');
+      const card = el('div', `public-card${/[♦♥]/.test(suit) ? ' red' : ''}`);
+      card.setAttribute('aria-label', `${suitNames[suit] ?? ''}${rank}`);
+      const ns = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(ns, 'svg');
+      svg.setAttribute('viewBox', '0 0 200 300'); svg.setAttribute('aria-hidden', 'true');
+      for (const [text, x, y, size, className] of [[rank, 100, 92, 78, 'public-card-rank'], [suit, 100, 214, 114, 'public-card-suit'],
+        [suitNames[suit] ?? '', 100, 278, 24, 'public-card-suit-name']]) {
+        const node = document.createElementNS(ns, 'text');
+        node.setAttribute('x', x); node.setAttribute('y', y); node.setAttribute('font-size', size);
+        node.setAttribute('text-anchor', 'middle'); node.setAttribute('class', className); node.textContent = text;
+        svg.append(node);
+      }
+      card.append(svg); row.append(card);
+    }
     wrap.append(row);
   } else wrap.append(el('div', 'floor-subtitle', '公共牌將於選牌階段公開'));
   return wrap;
@@ -751,6 +799,7 @@ function renderExitControl(data) {
   if (!control || !canPlayerExit(data, data.gameRules.common.sessionDurationSeconds * 1000)) return null;
   const node = el('section', 'shared-exit-control');
   node.style.cssText = rectStyle(control.rect);
+  node.style.transform = `rotate(${control.rotationDegrees ?? 0}deg)`;
   node.setAttribute('aria-label', '全體退出小遊戲並回到大廳');
   const confirming = data.exitConfirmation?.roundId === data.currentRound.id;
   if (confirming) {
@@ -772,6 +821,7 @@ function render(data) {
   if (!data) return;
   const structureKey = stageStructureKey(data);
   state = data;
+  tutorialProgress = { ...data.tutorialHold, active: data.phase === 'tutorial' && Boolean(data.tutorialHold?.active), receivedAt: performance.now() };
   $('#mouse-test-hint').hidden = !data.input?.mouseTest;
   venue.classList.toggle('mouse-test-enabled', Boolean(data.input?.mouseTest));
   if (structureKey === lastRenderedStructureKey) {
