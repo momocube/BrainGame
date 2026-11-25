@@ -224,3 +224,13 @@
 .shared-exit-note{top:152px;height:80px;font-size:18px;letter-spacing:1px;color:#bad4c3}
 .shared-exit-confirm{background:#782e35;border-color:#f18b91}
 .shared-exit-cancel{background:#1a4d4c;border-color:#72d8c7}
+/* 數迴（slitherlink） */
+.slither-zone-board{width:640px;height:512px;flex:none}
+.slither-zone-board svg{display:block;width:640px;height:512px}
+.slither-floor-board{flex:0 1 auto;height:68%;aspect-ratio:1;max-width:92%;min-height:0}
+.slither-floor-board svg{display:block;width:100%;height:100%}
+.round-result-question .slither-floor-board{height:58%}
+.shared-menu-split{display:grid;grid-template-columns:repeat(var(--split,2),minmax(0,1fr));width:640px;height:512px}
+.shared-menu-split .shared-game-tile{padding:16px}
+.shared-menu-split .shared-game-tile strong{font-size:34px}
+.shared-menu-split .shared-game-tile small{font-size:20px}

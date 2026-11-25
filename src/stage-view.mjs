@@ -58,6 +58,8 @@ export function createStageSnapshot(engine, rules, zones) {
         values: memoryPhase || showSolution ? [...player.values]
           : player.values.map((value) => value > 0 && value <= player.progress ? value : 0)
       };
+    } else if (gameId === 'slitherlink') {
+      view.slither = { edges: [...player.edges], moves: player.moves };
     }
     playerViews[zoneId] = view;
   }
@@ -95,6 +97,9 @@ export function createStageSnapshot(engine, rules, zones) {
     };
   } else if (gameId === 'memory_sequence') {
     publicQuestion = { count: question.count, memorySeconds: question.memorySeconds, cols: question.cols, rows: question.rows };
+  } else if (gameId === 'slitherlink') {
+    publicQuestion = { cols: question.cols, rows: question.rows, clues: [...question.clues] };
+    if (resultPhase) publicQuestion.solution = [...question.solution];
   }
 
   snapshot.currentRound = {

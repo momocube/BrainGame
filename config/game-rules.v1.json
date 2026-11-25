@@ -457,6 +457,55 @@
       "ranking": "finished_time_then_best_prefix_desc_then_first_reached_time",
       "remainingHeartsBreakTies": false,
       "zeroProgressPoints": 0
+    },
+    "slitherlink": {
+      "displayName": "數迴",
+      "rounds": 3,
+      "playSeconds": 180,
+      "boardColumns": 5,
+      "boardRows": 5,
+      "boardRect": {
+        "x": 80,
+        "y": 144,
+        "width": 480,
+        "height": 480
+      },
+      "tapCycle": "line_cross_blank",
+      "completion": "lines_match_unique_solution",
+      "sameBoardForAllPlayers": true,
+      "crossMarksAffectCompletion": false,
+      "endCondition": "n_minus_one_correct_or_deadline_single_player_requires_completion",
+      "ranking": "correct_completion_time",
+      "incompletePoints": 0,
+      "difficultyBands": [
+        {
+          "firstRound": 1,
+          "lastRound": 1,
+          "cluesMin": 12,
+          "cluesMax": 14,
+          "regionCellsMin": 9,
+          "regionCellsMax": 14,
+          "deductionTrialDepth": 0
+        },
+        {
+          "firstRound": 2,
+          "lastRound": 2,
+          "cluesMin": 10,
+          "cluesMax": 12,
+          "regionCellsMin": 10,
+          "regionCellsMax": 16,
+          "deductionTrialDepth": 0
+        },
+        {
+          "firstRound": 3,
+          "lastRound": 3,
+          "cluesMin": 9,
+          "cluesMax": 11,
+          "regionCellsMin": 10,
+          "regionCellsMax": 16,
+          "deductionTrialDepth": 1
+        }
+      ]
     }
   }
 }

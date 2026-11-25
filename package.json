@@ -12,7 +12,7 @@
     "desktop": "electron .",
     "package:desktop": "electron-forge package",
     "make:desktop": "node scripts/make-desktop.mjs",
-    "test": "node --test --test-concurrency=1 tests/game-engine.test.mjs tests/map-scene.test.mjs tests/game-rules.test.mjs tests/server.test.mjs tests/touch-protocol.test.mjs tests/touch-service-status.test.mjs tests/desktop.test.mjs tests/session-archive.test.mjs tests/touch-service-manager.test.mjs tests/player-zone-geometry.test.mjs tests/tutorial-content.test.mjs tests/stage-rendering.test.mjs"
+    "test": "node --test --test-concurrency=1 tests/game-engine.test.mjs tests/map-scene.test.mjs tests/game-rules.test.mjs tests/server.test.mjs tests/touch-protocol.test.mjs tests/touch-service-status.test.mjs tests/desktop.test.mjs tests/session-archive.test.mjs tests/touch-service-manager.test.mjs tests/player-zone-geometry.test.mjs tests/tutorial-content.test.mjs tests/stage-rendering.test.mjs tests/slitherlink.test.mjs"
   },
   "engines": {
     "node": ">=22.13.0"
