@@ -210,9 +210,12 @@ test('HTTP service starts a session, handles random selection, and reports stage
   try {
     const health = await waitForHealth(baseUrl, child, () => output);
     assert.equal(health.phase, 'idle');
-    const iconResponse = await fetch(`${baseUrl}/icons/08_slitherlink.png`);
-    assert.equal(iconResponse.status, 200);
-    assert.equal(iconResponse.headers.get('content-type'), 'image/png');
+    for (const asset of ['08_slitherlink.png', 'logo-704.png']) {
+      const iconResponse = await fetch(`${baseUrl}/icons/${asset}`);
+      assert.equal(iconResponse.status, 200);
+      assert.equal(iconResponse.headers.get('content-type'), 'image/png');
+      assert.ok(Buffer.from(await iconResponse.arrayBuffer()).equals(fs.readFileSync(path.join(ROOT, 'public/icons', asset))));
+    }
     const selfCheck = await waitUntil(
       async () => fetch(`${baseUrl}/api/state?view=diagnostics`).then((response) => response.json()),
       (value) => value.input?.detail?.includes('啟動自檢'),

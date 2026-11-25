@@ -1,3 +1,4 @@
+import { createIdleParticles } from './idle-scene.mjs';
 import { pokerTiming, pokerStage } from './poker-timing.mjs';
 import { CAD_SCENE, PROJECTION_CANVAS, calculateProjectionFit } from './projection-layout.mjs';
 import { installMouseInput } from './mouse-input.mjs';
@@ -15,6 +16,7 @@ const venueWidth = CAD_SCENE.width, venueHeight = CAD_SCENE.height;
 const projectionWidth = PROJECTION_CANVAS.width, projectionHeight = PROJECTION_CANVAS.height;
 const venue = $('#venue');
 const projectionCanvas = $('#projection-canvas');
+const idleParticles = createIdleParticles($('#idle-particles'));
 const gameNames = {
   minesweeper: '踩地雷', zero_sum_grid: '數字方格', cube_count: '3D 數方塊',
   solid_puzzle: '立體拼圖', memory_poker: '記憶撲克', map_view: '地圖定位', memory_sequence: '數字速記',
@@ -499,6 +501,14 @@ function sequencePhase(round, config) {
 function renderFloor(data) {
   floor.replaceChildren();
   floor.classList.toggle('shared-floor-controls-active', data.phase === 'tutorial');
+  if (data.phase === 'idle') {
+    const logo = el('img', 'idle-logo');
+    logo.src = '/icons/logo-704.png';
+    logo.alt = '腦力競賽・光域704';
+    logo.draggable = false;
+    floor.append(logo);
+    return;
+  }
   if (data.phase === 'lobby') {
     const joined = data.layout?.participantCount ?? 0;
     const box = el('div', 'shared-floor-screen shared-lobby-floor');
@@ -990,7 +1000,10 @@ function render(data) {
   const structureKey = stageStructureKey(data);
   state = data;
   tutorialProgress = { ...data.tutorialHold, active: data.phase === 'tutorial' && Boolean(data.tutorialHold?.active), receivedAt: performance.now() };
-  $('#mouse-test-hint').hidden = !data.input?.mouseTest;
+  const idle = data.phase === 'idle';
+  venue.classList.toggle('idle-mode', idle);
+  idleParticles.setActive(idle);
+  $('#mouse-test-hint').hidden = idle || !data.input?.mouseTest;
   venue.classList.toggle('mouse-test-enabled', Boolean(data.input?.mouseTest));
   venue.classList.toggle('exit-confirming', Boolean(data.exitConfirmation));
   if (structureKey === lastRenderedStructureKey) {
@@ -1016,13 +1029,15 @@ function render(data) {
     }
   } else if (data.phase === 'tutorial') {
     for (const wall of sharedTutorialWalls(data.menuZones ?? [])) zones.append(renderSharedTutorialWall(wall, data));
-  } else {
+  } else if (!idle) {
     for (const panel of data.questionPanels ?? []) zones.append(renderQuestionPanel(panel, data));
     for (const zone of data.zones ?? []) zones.append(renderZone(zone, views, data));
   }
-  for (const area of data.reservedRects ?? []) zones.append(renderReservedArea(area));
-  const exitControl = renderExitControl(data);
-  if (exitControl) zones.append(exitControl);
+  if (!idle) {
+    for (const area of data.reservedRects ?? []) zones.append(renderReservedArea(area));
+    const exitControl = renderExitControl(data);
+    if (exitControl) zones.append(exitControl);
+  }
   renderFloor(data);
   if (data.phase === 'playing' && data.currentRound) {
     for (const target of [floor, ...document.querySelectorAll('.question-content')]) target.append(el('div', 'round-timer', roundTimer(data)));
