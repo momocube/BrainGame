@@ -180,6 +180,20 @@ function validateCommon(common) {
   assertText(layout.geometrySource, 'common.layout.geometrySource');
   assertRect(layout.interactiveRect, 'common.layout.interactiveRect', width, height);
   assertRect(layout.statusRect, 'common.layout.statusRect', width, height);
+  if (Object.hasOwn(layout, 'numericEntryRect') || Object.hasOwn(layout, 'numericKeypadRect')) {
+    if (!Object.hasOwn(layout, 'numericEntryRect') || !Object.hasOwn(layout, 'numericKeypadRect')) {
+      throw new Error('common.layout 數字輸入顯示區與按鍵區必須一起設定');
+    }
+    assertRect(layout.numericEntryRect, 'common.layout.numericEntryRect', width, height);
+    assertRect(layout.numericKeypadRect, 'common.layout.numericKeypadRect', width, height);
+    const { numericEntryRect: entry, numericKeypadRect: keypad, interactiveRect: interactive } = layout;
+    if (entry.x !== interactive.x || keypad.x !== interactive.x ||
+        entry.width !== interactive.width || keypad.width !== interactive.width ||
+        entry.y !== interactive.y || entry.y + entry.height !== keypad.y ||
+        keypad.y + keypad.height !== interactive.y + interactive.height) {
+      throw new Error('common.layout 數字輸入顯示區與按鍵區必須連續填滿可操作區');
+    }
+  }
   if (layout.interactiveRect.x !== 0 || layout.interactiveRect.width !== width ||
       layout.statusRect.x !== 0 || layout.statusRect.width !== width || layout.statusRect.y !== 0 ||
       layout.statusRect.y + layout.statusRect.height !== layout.interactiveRect.y ||

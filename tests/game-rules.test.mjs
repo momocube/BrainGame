@@ -22,6 +22,13 @@ test('default game rules validate and round-trip through the editable settings v
   assert.equal(Object.keys(settings.games).length, 7);
 });
 
+test('older saved rules without numeric field rectangles remain valid for recovery', () => {
+  const legacy = structuredClone(defaults);
+  delete legacy.common.layout.numericEntryRect;
+  delete legacy.common.layout.numericKeypadRect;
+  assert.equal(validateGameRules(legacy).rulesVersion, defaults.rulesVersion);
+});
+
 test('map view wall layout places the six answer keys beneath the map and above confirmation', () => {
   const map = defaults.games.map_view;
   assert.deepEqual(map.mapPanelRect, { x: 0, y: 128, width: 640, height: 256 });
@@ -115,6 +122,8 @@ test('common timing, scoring, and input geometry reject malformed runtime settin
     [rules => { rules.common.scoring.gameSetBonusPoints = 1.5; }, /common.scoring.gameSetBonusPoints/],
     [rules => { rules.common.freezeAllClocksWhilePausedAndResuming = 'yes'; }, /必須是布林值/],
     [rules => { rules.common.layout.interactiveRect.y = 600; }, /超出玩家介面範圍/],
+    [rules => { rules.common.layout.numericKeypadRect.y = 270; }, /必須連續填滿可操作區/],
+    [rules => { delete rules.common.layout.numericKeypadRect; }, /必須一起設定/],
     [rules => { rules.common.layout.numericKeypadKeys[0] = '0'; }, /numericKeypadKeys 必須恰好包含/],
     [rules => { delete rules.common.sessionDurationSeconds; }, /common 缺少 sessionDurationSeconds/],
     [rules => { delete rules.rulesVersion; }, /rulesVersion 必須是非空文字/]
@@ -132,6 +141,15 @@ test('numeric game inputs validate bounds and game-specific answer limits', () =
     [rules => { rules.games.cube_count.numericInputMaximum = '150'; }, /numericInputMaximum/]
   ];
   for (const [change, error] of cases) assert.throws(() => validateGameRules(changedRules(change)), error);
+});
+
+test('numeric keypad layout puts confirm, correction, and restart in the approved positions', () => {
+  const layout = defaults.common.layout;
+  assert.deepEqual(layout.numericEntryRect, { x: 0, y: 128, width: 640, height: 144 });
+  assert.deepEqual(layout.numericKeypadRect, { x: 0, y: 272, width: 640, height: 368 });
+  assert.equal(layout.numericKeypadKeys[3], 'confirm');
+  assert.equal(layout.numericKeypadKeys[7], 'backspace');
+  assert.equal(layout.numericKeypadKeys[15], 'clear');
 });
 
 test('board dimensions, mine start safety, sequence capacity, and answer grid stay compatible', () => {

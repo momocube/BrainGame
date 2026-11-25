@@ -700,7 +700,7 @@ test('HTTP service starts a session, handles random selection, and reports stage
     const fullArchive = await fetch(`${baseUrl}/api/sessions/${sessions[0].sessionId}.json`);
     assert.equal(fullArchive.status, 200);
     assert.match(fullArchive.headers.get('content-type'), /application\/json/);
-    assert.equal((await fullArchive.json()).rulesSnapshot.rulesVersion, '1.0.10');
+    assert.equal((await fullArchive.json()).rulesSnapshot.rulesVersion, '1.0.11');
     assert.equal((await fetch(`${baseUrl}/api/sessions/not-a-session.csv`)).status, 404);
 
     const selected = await postControl({ action: 'select-random-game' });
@@ -830,12 +830,12 @@ test('a server process restart resumes from the last settled round and retries t
       for (const client of touchService.clients) if (client.readyState === 1) client.send(JSON.stringify(frame));
     };
     const tapKey = async (key) => {
-      const keys = ['1', '2', '3', 'backspace', '4', '5', '6', 'clear', '7', '8', '9', 'spacer', 'spacer', '0', 'spacer', 'confirm'];
+      const keys = ['1', '2', '3', 'confirm', '4', '5', '6', 'backspace', '7', '8', '9', 'spacer', 'spacer', '0', 'spacer', 'clear'];
       const index = keys.indexOf(key);
       assert.notEqual(index, -1, `the keypad contains ${key}`);
       const column = index % 4, row = Math.floor(index / 4), id = contactId++;
       const u = ((column + 0.5) * 160) / 640;
-      const v = (128 + (row + 0.5) * 128) / 640;
+      const v = (272 + (row + 0.5) * 92) / 640;
       sendTouch(id, 'down', u, v, [id]);
       await new Promise((resolve) => setTimeout(resolve, 20));
       sendTouch(id, 'up', u, v, []);

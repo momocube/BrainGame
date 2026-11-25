@@ -92,6 +92,16 @@ function completeRoundWithCorrectAnswer(engine) {
 
 function p1TouchEvent(id, phase, u, v, zoneId = 'P1', engine = null) {
   const zone = engine?.zoneById.get(zoneId) ?? zones.players.find((item) => item.id === zoneId);
+  return zoneTouchEvent(id, phase, u, v, zone, zoneId);
+}
+
+function menuTouchEvent(id, phase, u, v, zoneId, engine) {
+  const zone = engine.menuZones.find((item) => item.id === zoneId);
+  return zoneTouchEvent(id, phase, u, v, zone, zoneId);
+}
+
+function zoneTouchEvent(id, phase, u, v, zone, zoneId) {
+  assert.ok(zone, `${zoneId} has a configured touch area`);
   const sideways = zone.rotationDegrees === 90 || zone.rotationDegrees === 270;
   const width = sideways ? zone.rect.height : zone.rect.width;
   const height = sideways ? zone.rect.width : zone.rect.height;
@@ -110,6 +120,13 @@ function p1TouchEvent(id, phase, u, v, zoneId = 'P1', engine = null) {
   const cadX = source.x + sourceU * source.width;
   const cadY = source.y + screenV * source.height;
   return { id, phase, face: source.face, px: [cadY, 3_328 - cadX] };
+}
+
+function floorTouchEvent(id, phase, u, v) {
+  const { face, rect } = zones.profilePlan.floorRect;
+  const cadX = rect.x + u * rect.width;
+  const cadY = rect.y + v * rect.height;
+  return { id, phase, face, px: [cadY, 3_328 - cadX] };
 }
 
 function touchFrame(events, alive) {
@@ -569,7 +586,7 @@ test('eight same-frame correct submissions are all accepted before the round set
 
   const tapForEveryone = (key) => {
     const index = keys.indexOf(key);
-    const rect = keypad.interactiveRect;
+    const rect = keypad.numericKeypadRect ?? keypad.interactiveRect;
     const col = index % keypad.numericKeypadColumns, row = Math.floor(index / keypad.numericKeypadColumns);
     const u = (rect.x + (col + 0.5) * rect.width / keypad.numericKeypadColumns) / 640;
     const v = (rect.y + (row + 0.5) * rect.height / keypad.numericKeypadRows) / 640;
@@ -708,7 +725,7 @@ test('all seven games accept correct inputs from every TouchService player zone'
     const layout = rules.common.layout;
     const index = layout.numericKeypadKeys.indexOf(key);
     assert.notEqual(index, -1, `numeric keypad includes ${key}`);
-    tapSharedPoint(engine, layout.interactiveRect, index % layout.numericKeypadColumns,
+    tapSharedPoint(engine, layout.numericKeypadRect ?? layout.interactiveRect, index % layout.numericKeypadColumns,
       Math.floor(index / layout.numericKeypadColumns), layout.numericKeypadColumns, layout.numericKeypadRows);
   };
 
@@ -1181,11 +1198,15 @@ test('CAVE player view corners and TouchService hits share the same orientation'
 });
 
 test('every active head-count profile routes each TouchService source to its ordered player ID', () => {
-  const engine = new GameEngine({ rules, zones, onSave() {} });
-  startReadySession(engine);
   for (let count = 0; count <= 8; count++) {
-    if (count > 0) engine.join(`P${count}`);
-    for (const zone of engine.zones) for (const source of zone.sources) {
+    const engine = new GameEngine({ rules, zones, onSave() {} });
+    startReadySession(engine);
+    for (let player = 1; player <= count; player++) engine.join(`P${player}`);
+    if (count > 0) {
+      engine.selectGame('minesweeper');
+      engine.confirmGameSelection();
+    }
+    if (count > 0) for (const zone of engine.zones) for (const source of zone.sources) {
       const cadX = source.x + source.width / 2;
       const cadY = source.y + source.height / 2;
       const result = engine.canvasPosition(source.face, [cadY, zones.canvas.width - cadX]);
@@ -1264,10 +1285,14 @@ test('touch hit regions match the board, keypad, card and choice layouts', () =>
   const correct = numeric.state.currentRound.question.answers.length;
   const wrong = (correct + 1) % 64;
   const keypad = rules.common.layout;
+  const entryRect = keypad.numericEntryRect;
+  numeric.coordinateAction('P1', (entryRect.x + entryRect.width / 2) / 640,
+    (entryRect.y + entryRect.height / 2) / 640);
+  assert.equal(numeric.state.currentRound.players.P1.entry, '', 'touches on the enlarged answer display do not become keypad input');
   const press = (key) => {
     const index = keypad.numericKeypadKeys.indexOf(key);
     assert.ok(index >= 0, `key ${key} is configured`);
-    const point = pointAt(keypad.interactiveRect, index % keypad.numericKeypadColumns,
+    const point = pointAt(keypad.numericKeypadRect ?? keypad.interactiveRect, index % keypad.numericKeypadColumns,
       Math.floor(index / keypad.numericKeypadColumns), keypad.numericKeypadColumns, keypad.numericKeypadRows);
     numeric.coordinateAction('P1', point.u, point.v);
   };
@@ -1409,7 +1434,7 @@ test('only the staff join operation can add a player from the lobby', () => {
   assert.deepEqual(engine.state.participantIds, ['P1']);
 });
 
-test('unjoined players cannot join by moving across zones; tutorial completion hold still cancels outside its control', () => {
+test('players cannot join by touching a wall, and tutorial holds are limited to the shared floor button', () => {
   const join = new GameEngine({ rules, zones, onSave() {} });
   startReadySession(join);
   join.handleTouchFrame(touchFrame([p1TouchEvent(52, 'down', 0.5, 0.5, 'P1', join)], [52]));
@@ -1429,6 +1454,11 @@ test('unjoined players cannot join by moving across zones; tutorial completion h
   ready.handleTouchFrame(touchFrame([p1TouchEvent(53, 'up', 0.5, 0.9)], []));
   assert.equal(ready.state.participants.P1.ready, false, 'releasing outside the ready control cannot ready the player');
   assert.equal(ready.state.phase, 'tutorial');
+
+  ready.handleTouchFrame(touchFrame([floorTouchEvent(54, 'down', 0.1, 0.85)], [54]));
+  ready.contacts.get('54').started -= rules.common.readyHoldSeconds * 1_000 + 200;
+  ready.handleTouchFrame(touchFrame([floorTouchEvent(54, 'up', 0.1, 0.85)], []));
+  assert.equal(ready.state.phase, 'tutorial', 'floor touches outside the single shared button do nothing');
 });
 
 test('hold gestures are cancelled by a flow change even if the same phase returns before release', () => {
@@ -1438,12 +1468,12 @@ test('hold gestures are cancelled by a flow change even if the same phase return
   engine.selectGame('minesweeper');
   engine.confirmGameSelection();
 
-  engine.handleTouchFrame(touchFrame([p1TouchEvent(54, 'down', 0.5, 0.82)], [54]));
+  engine.handleTouchFrame(touchFrame([floorTouchEvent(54, 'down', 0.5, 0.85)], [54]));
   engine.contacts.get('54').started -= rules.common.readyHoldSeconds * 1_000 + 200;
   engine.returnToLobby();
   engine.selectGame('minesweeper');
   engine.confirmGameSelection();
-  engine.handleTouchFrame(touchFrame([p1TouchEvent(54, 'up', 0.5, 0.82)], []));
+  engine.handleTouchFrame(touchFrame([floorTouchEvent(54, 'up', 0.5, 0.85)], []));
 
   assert.equal(engine.state.phase, 'tutorial');
   assert.equal(engine.state.participants.P1.ready, false,
@@ -1455,21 +1485,16 @@ test('staff joins a player, who can choose, prepare, start and answer through To
   startReadySession(engine);
   engine.joinFromZone('P1');
 
-  const lobbyRect = rules.common.layout.interactiveRect;
-  const gamePoint = {
-    u: (lobbyRect.x + lobbyRect.width / 4) / 640,
-    v: (lobbyRect.y + lobbyRect.height / 8) / 640
-  };
-  engine.handleTouchFrame(touchFrame([p1TouchEvent(82, 'down', gamePoint.u, gamePoint.v)], [82]));
+  engine.handleTouchFrame(touchFrame([menuTouchEvent(82, 'down', 0.5, 0.6, 'P1', engine)], [82]));
   assert.equal(engine.state.phase, 'game_preview');
   assert.equal(engine.state.selectedGame, 'minesweeper');
-  engine.handleTouchFrame(touchFrame([p1TouchEvent(83, 'down', 0.25, 0.82)], [83]));
+  engine.handleTouchFrame(touchFrame([floorTouchEvent(83, 'down', 0.25, 0.82)], [83]));
   assert.equal(engine.state.phase, 'tutorial');
 
-  const readyPoint = { u: 0.5, v: 0.82 };
-  engine.handleTouchFrame(touchFrame([p1TouchEvent(84, 'down', readyPoint.u, readyPoint.v)], [84]));
+  const readyPoint = { u: 0.5, v: 0.85 };
+  engine.handleTouchFrame(touchFrame([floorTouchEvent(84, 'down', readyPoint.u, readyPoint.v)], [84]));
   engine.contacts.get('84').started -= rules.common.readyHoldSeconds * 1_000 + 200;
-  engine.handleTouchFrame(touchFrame([p1TouchEvent(84, 'up', readyPoint.u, readyPoint.v)], []));
+  engine.handleTouchFrame(touchFrame([floorTouchEvent(84, 'up', readyPoint.u, readyPoint.v)], []));
   assert.equal(engine.state.phase, 'countdown');
   advance(engine, rules.common.countdownSeconds * 1_000);
   assert.equal(engine.state.phase, 'playing');
@@ -1490,57 +1515,60 @@ test('lobby offers random selection and rejects conflicting choices from the sam
     engine.join('P2');
     return engine;
   };
-  const pointAtTile = (index) => {
-    const rect = rules.common.layout.interactiveRect;
-    const col = index % 2, row = Math.floor(index / 2);
-    return {
-      u: (rect.x + (col + 0.5) * rect.width / 2) / 640,
-      v: (rect.y + (row + 0.5) * rect.height / 4) / 640
-    };
-  };
+  const optionTouch = (engine, index, id, phase = 'down') =>
+    menuTouchEvent(id, phase, 0.5, 0.6, zones.players[index].id, engine);
+  const empty = new GameEngine({ rules, zones, onSave() {} });
+  startReadySession(empty);
+  empty.handleTouchFrame(touchFrame([optionTouch(empty, 0, 70)], [70]));
+  assert.equal(empty.state.phase, 'lobby', 'the shared menu waits for at least one staff-added player');
+  assert.equal(empty.snapshot().menuZones.length, 8, 'all fixed wall menu surfaces remain available as one room-wide menu');
+
+  const fixedMenu = createLobby();
+  for (const [index, zone] of fixedMenu.menuZones.entries()) {
+    const touch = menuTouchEvent(700 + index, 'down', 0.5, 0.6, zone.id, fixedMenu);
+    assert.equal(fixedMenu.canvasPosition(touch.face, touch.px)?.zoneId, zone.id,
+      `shared menu surface ${zone.id} maps to its fixed wall position`);
+  }
+  assert.equal(fixedMenu.canvasPosition(5, [2_368, zones.canvas.width - 1_152]), null,
+    'shared menu input never covers the entrance face');
 
   const conflict = createLobby();
-  const first = pointAtTile(0), second = pointAtTile(1);
   conflict.handleTouchFrame(touchFrame([
-    p1TouchEvent(71, 'down', first.u, first.v, 'P1', conflict),
-    p1TouchEvent(72, 'down', second.u, second.v, 'P2', conflict)
+    optionTouch(conflict, 0, 71),
+    optionTouch(conflict, 1, 72)
   ], [71, 72]));
   assert.equal(conflict.state.phase, 'lobby');
   assert.equal(conflict.state.selectedGame, null);
-  assert.match(conflict.state.notice, /同時選了不同遊戲/);
+  assert.match(conflict.state.notice, /共同選擇一款/);
 
   const shared = createLobby();
   shared.handleTouchFrame(touchFrame([
-    p1TouchEvent(73, 'down', first.u, first.v, 'P1', shared),
-    p1TouchEvent(74, 'down', first.u, first.v, 'P2', shared)
+    optionTouch(shared, 0, 73),
+    optionTouch(shared, 0, 74)
   ], [73, 74]));
   assert.equal(shared.state.phase, 'game_preview');
   assert.equal(shared.state.selectedGame, 'minesweeper');
 
-  const confirm = { u: 0.25, v: 0.82 };
-  shared.coordinateAction('P1', confirm.u, confirm.v);
+  shared.coordinateAction('FLOOR', 0.25, 0.82);
   assert.equal(shared.state.phase, 'tutorial', 'a player confirms the selected game before the tutorial begins');
 
-  const joinAndSelect = createLobby();
-  const joinPoint = { u: 0.5, v: 0.5 };
-  joinAndSelect.handleTouchFrame(touchFrame([p1TouchEvent(75, 'down', joinPoint.u, joinPoint.v, 'P3', joinAndSelect)], [75]));
-  joinAndSelect.contacts.get('75').started -= 60_000;
-  joinAndSelect.handleTouchFrame(touchFrame([
-    p1TouchEvent(75, 'up', joinPoint.u, joinPoint.v, 'P3', joinAndSelect),
-    p1TouchEvent(76, 'down', first.u, first.v, 'P1', joinAndSelect)
-  ], [76]));
-  assert.equal(joinAndSelect.state.participants.P3, undefined);
-  assert.deepEqual(joinAndSelect.state.participantIds, ['P1', 'P2']);
-  assert.equal(joinAndSelect.state.selectedGame, 'minesweeper');
-  assert.equal(joinAndSelect.state.phase, 'game_preview');
+  const noPlayerLobby = new GameEngine({ rules, zones, onSave() {} });
+  startReadySession(noPlayerLobby);
+  noPlayerLobby.handleTouchFrame(touchFrame([optionTouch(noPlayerLobby, 2, 75)], [75]));
+  noPlayerLobby.handleTouchFrame(touchFrame([optionTouch(noPlayerLobby, 2, 75, 'up')], []));
+  assert.deepEqual(noPlayerLobby.state.participantIds, []);
+  noPlayerLobby.joinFromZone('P1');
+  noPlayerLobby.handleTouchFrame(touchFrame([optionTouch(noPlayerLobby, 2, 76)], [76]));
+  assert.deepEqual(noPlayerLobby.state.participantIds, ['P1']);
+  assert.equal(noPlayerLobby.state.selectedGame, 'cube_count');
+  assert.equal(noPlayerLobby.state.phase, 'game_preview');
 
   const random = createLobby();
-  const randomPoint = pointAtTile(7);
-  random.coordinateAction('P1', randomPoint.u, randomPoint.v);
+  random.handleTouchFrame(touchFrame([optionTouch(random, 7, 77)], [77]));
   assert.equal(random.state.phase, 'game_preview');
   assert.ok(GAME_IDS.includes(random.state.selectedGame));
   assert.match(random.state.notice, /隨機抽中/);
-  random.coordinateAction('P1', 0.25, 0.82);
+  random.coordinateAction('FLOOR', 0.25, 0.82);
   assert.equal(random.state.phase, 'tutorial', 'random selection is shown before a player confirms it');
 });
 
@@ -1552,18 +1580,21 @@ test('game preview can be cancelled, and one player can complete the shared tuto
 
   engine.selectGame('memory_poker');
   assert.equal(engine.state.phase, 'game_preview');
-  engine.coordinateAction('P1', 0.75, 0.82);
+  engine.coordinateAction('FLOOR', 0.75, 0.82);
   assert.equal(engine.state.phase, 'lobby', 'cancel returns to the game menu');
   assert.equal(engine.state.selectedGame, null);
 
   engine.selectGame('memory_poker');
-  engine.coordinateAction('P2', 0.25, 0.82);
-  assert.equal(engine.state.phase, 'tutorial', 'confirm opens the fixed tutorial');
-  engine.handleTouchFrame(touchFrame([p1TouchEvent(86, 'down', 0.5, 0.82, 'P1', engine)], [86]));
+  engine.coordinateAction('FLOOR', 0.25, 0.82);
+  assert.equal(engine.state.phase, 'tutorial', 'the shared floor confirm opens the fixed tutorial');
+  engine.coordinateAction('P1', 0.5, 0.85, 5_000);
+  assert.equal(engine.state.phase, 'tutorial', 'player walls no longer expose separate tutorial-complete buttons');
+  engine.handleTouchFrame(touchFrame([floorTouchEvent(86, 'down', 0.5, 0.85)], [86]));
   engine.contacts.get('86').started -= rules.common.readyHoldSeconds * 1_000 + 200;
-  engine.handleTouchFrame(touchFrame([p1TouchEvent(86, 'up', 0.5, 0.82, 'P1', engine)], []));
+  engine.handleTouchFrame(touchFrame([floorTouchEvent(86, 'up', 0.5, 0.85)], []));
   assert.equal(engine.state.phase, 'countdown', 'one completed tutorial hold starts the three-second countdown');
   assert.equal(engine.state.currentRound.gameId, 'memory_poker');
+  assert.deepEqual(engine.state.currentRound.participantIds, ['P1', 'P2'], 'one shared floor hold prepares every player');
 });
 
 test('two controls touched in one player zone batch are rejected together', () => {

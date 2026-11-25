@@ -144,3 +144,36 @@
 .game-preview-controls>div{display:grid;place-items:center;padding:10px;text-align:center;font-size:23px;font-weight:900;border:1px solid var(--zone-action-border)}
 .game-preview-confirm{background:var(--zone-action);color:var(--zone-action-text)}
 .game-preview-cancel{background:var(--zone-cell);color:#eaf3ff;border-color:var(--zone-cell-border)!important}
+
+/* One shared lobby menu spans the fixed CAVE wall surfaces; the floor carries shared status and onboarding controls. */
+.shared-menu-content{grid-template-rows:128px 512px}
+.shared-menu-body{padding:0}
+.shared-game-tile{width:100%;height:100%;display:grid;align-content:center;justify-items:center;gap:18px;padding:24px;border:3px solid var(--zone-cell-border);background:var(--zone-cell);color:#f5f8ff;text-align:center}
+.shared-game-tile.random-game{border-color:var(--zone-action-border);background:#143f46;color:var(--zone-action-text)}
+.shared-game-tile strong{font-size:40px;line-height:1.15;font-weight:900}
+.shared-game-tile small{font-size:24px;color:#c7d8eb}
+.shared-game-prompt{font-size:20px;color:#9fb7d2}
+.shared-menu-reminder{max-width:88%;font-size:27px;line-height:1.4;color:#c7d8eb}
+.floor.shared-floor-controls-active{padding:0;border:0}
+.shared-floor-screen{position:relative;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center;overflow:hidden}
+.shared-lobby-floor{justify-content:center;gap:24px;padding:8%}
+.shared-lobby-floor .floor-title{font-size:62px}
+.shared-lobby-floor .floor-subtitle{max-width:86%;font-size:30px;line-height:1.4}
+.shared-preview-floor,.shared-tutorial-floor{padding:5% 8%}
+.shared-preview-floor .floor-title,.shared-tutorial-floor .floor-title{font-size:56px}
+.shared-floor-description{max-width:88%;margin:22px auto 0;font-size:32px;line-height:1.4;color:#d8e4f3}
+.shared-floor-notice{margin-top:12px;font-size:23px;color:#a9bed9}
+.shared-floor-controls{position:absolute;left:0;top:76%;width:100%;height:18%;display:grid;grid-template-columns:1fr 1fr;gap:0}
+.shared-floor-action{display:grid;place-items:center;padding:10px 18px;border:3px solid var(--zone-action-border);background:var(--zone-action);color:var(--zone-action-text);font-size:32px;font-weight:900;line-height:1.2}
+.shared-preview-cancel{border-color:var(--zone-cell-border);background:var(--zone-cell);color:#eaf3ff}
+.shared-tutorial-controls{left:25%;width:50%;grid-template-columns:1fr}
+.shared-tutorial-complete{border-color:#80e3d8;background:#155c5c;color:#f3fffd;font-size:38px}
+.tutorial-body{grid-template-rows:minmax(0,1fr) 62px;gap:8px}
+.tutorial-shared-hint{display:grid;place-items:center;padding:8px;border:1px solid var(--zone-cell-border);background:var(--zone-cell);color:#d8e4f3;font-size:18px;font-weight:800}
+.game-preview-body{grid-template-rows:minmax(0,1fr);padding:12px 16px}
+.numeric-entry-display{flex:none;display:grid;grid-template-rows:18px minmax(0,1fr);justify-items:center;align-items:center;overflow:hidden;border:2px solid var(--zone-cell-border);background:#101b2b;color:#f5f8ff}
+.numeric-entry-label{font-size:15px;line-height:18px;color:#a9bed9}
+.numeric-entry-value{width:100%;height:126px;display:grid;place-items:center;font-size:140px;line-height:126px;font-weight:900;white-space:nowrap;overflow:hidden}
+.numeric-entry-lock{position:absolute;left:-10000px}
+.zone-body:has(.numeric-entry-display){position:relative}
+.zone .key.confirm{background:var(--zone-action)}

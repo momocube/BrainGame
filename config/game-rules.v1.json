@@ -1,7 +1,7 @@
 {
-  "rulesVersion": "1.0.10",
+  "rulesVersion": "1.0.11",
   "status": "prototype_in_progress",
-  "updatedAt": "2026-11-24",
+  "updatedAt": "2026-11-25",
   "common": {
     "sessionDurationSeconds": 2700,
     "countdownSeconds": 3,
@@ -20,7 +20,7 @@
     "sessionExpiryDuringRoundResults": "finish_results_then_final",
     "participantRoster": "freeze_for_game_set",
     "timedHintsEnabled": false,
-    "floorInputEnabled": false,
+    "floorInputEnabled": true,
     "inputTrigger": "down_once_then_release",
     "sameZoneMultiControlBatch": "reject_without_penalty",
     "deadlineComparison": "received_active_time_strictly_less_than_deadline",
@@ -54,6 +54,18 @@
         "width": 640,
         "height": 512
       },
+      "numericEntryRect": {
+        "x": 0,
+        "y": 128,
+        "width": 640,
+        "height": 144
+      },
+      "numericKeypadRect": {
+        "x": 0,
+        "y": 272,
+        "width": 640,
+        "height": 368
+      },
       "statusRect": {
         "x": 0,
         "y": 0,
@@ -66,11 +78,11 @@
         "1",
         "2",
         "3",
-        "backspace",
+        "confirm",
         "4",
         "5",
         "6",
-        "clear",
+        "backspace",
         "7",
         "8",
         "9",
@@ -78,7 +90,7 @@
         "spacer",
         "0",
         "spacer",
-        "confirm"
+        "clear"
       ],
       "orientation": "per_zone_player_facing_view",
       "geometrySource": "TouchService_704_profile"

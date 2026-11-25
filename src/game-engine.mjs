@@ -684,6 +684,7 @@ export class GameEngine {
     }
     this.configureRules(this.restoredRulesError ? this.configuredRules : activeRules);
     this.zoneConfig = zones;
+    this.menuZones = structuredClone(zones.players);
     this.knownPlayerIds = new Set(zones.players.map((player) => player.id));
     this.onChange = onChange;
     this.onSave = onSave;
@@ -781,6 +782,7 @@ export class GameEngine {
       ? Math.max(0, this.state.currentRound.limitMs - this.state.currentRound.elapsedMs) : null;
     state.availableGames = this.gameOrder.map((id) => ({ id, name: this.rules.games[id].displayName ?? LABELS[id], rounds: this.rules.games[id].rounds }));
     state.zones = this.zones.map((z) => ({ id: z.id, name: z.name, rotationDegrees: z.rotationDegrees, rect: z.rect }));
+    state.menuZones = this.menuZones.map((z) => ({ id: z.id, name: z.name, rotationDegrees: z.rotationDegrees, rect: z.rect }));
     state.questionPanels = this.layout.questionPanels.map((panel) => ({
       id: panel.id, playerId: panel.playerId, name: panel.name,
       rotationDegrees: panel.rotationDegrees, rect: panel.rect
@@ -1033,6 +1035,14 @@ export class GameEngine {
     this.prepareRound();
   }
 
+  completeSharedTutorial() {
+    if (this.state.phase !== 'tutorial') throw new Error('目前不在教學準備階段');
+    if (!this.state.participantIds.length) throw new Error('尚無玩家加入，無法開始遊戲');
+    this.state.readyIds = [...this.state.participantIds];
+    this.state.notice = '全體共用地板按鈕已完成教學；即將倒數 3 秒。';
+    this.prepareRound();
+  }
+
   startAfterTutorial() {
     if (this.state.phase !== 'tutorial') throw new Error('目前不在教學準備階段');
     this.prepareRound();
@@ -1214,26 +1224,32 @@ export class GameEngine {
     const height = layout.localDesignHeight;
     const x = u * width, y = v * height;
     const inside = (rect) => x >= rect.x && y >= rect.y && x < rect.x + rect.width && y < rect.y + rect.height;
-    const joined = Boolean(this.state.participants[zoneId]);
-    const player = this.currentPlayer(zoneId);
     const phase = this.state.phase;
-    if (!joined) return;
-    if (phase === 'game_preview') {
-      const action = this.gamePreviewActionAt(u, v);
-      if (action === 'confirm') {
-        this.recordPlayerInput(zoneId, { type: 'confirm-game-selection', gameId: this.state.selectedGame }, { phase: 'game_preview' });
-        this.confirmGameSelection();
-      } else if (action === 'cancel') {
-        this.recordPlayerInput(zoneId, { type: 'cancel-game-selection', gameId: this.state.selectedGame }, { phase: 'game_preview' });
-        this.returnToLobby();
+    if (zoneId === 'FLOOR') {
+      if (phase === 'game_preview') {
+        const action = this.gamePreviewActionAt(u, v);
+        if (action === 'confirm') {
+          this.recordPlayerInput(null, { type: 'confirm-game-selection', gameId: this.state.selectedGame }, { phase: 'game_preview' });
+          this.confirmGameSelection();
+        } else if (action === 'cancel') {
+          this.recordPlayerInput(null, { type: 'cancel-game-selection', gameId: this.state.selectedGame }, { phase: 'game_preview' });
+          this.returnToLobby();
+        }
+      } else if (phase === 'tutorial' &&
+          this.pointInsideHoldTarget({ x: 0.25, y: 0.76, width: 0.5, height: 0.18 }, { u, v }) &&
+          heldMs >= this.rules.common.readyHoldSeconds * 1000) {
+        this.recordPlayerInput(null, { type: 'complete-tutorial' }, { phase: 'tutorial', relatedZones: [...this.state.participantIds] });
+        this.completeSharedTutorial();
       }
       return;
     }
+    const joined = Boolean(this.state.participants[zoneId]);
+    const player = this.currentPlayer(zoneId);
+    if (!joined) return;
+    if (phase === 'game_preview') {
+      return;
+    }
     if (phase === 'tutorial') {
-      if (v >= 0.72 && v < 0.94 && heldMs >= this.rules.common.readyHoldSeconds * 1000) {
-        this.recordPlayerInput(zoneId, { type: 'complete-tutorial' }, { phase: 'tutorial' });
-        this.setReady(zoneId);
-      }
       return;
     }
     if (phase === 'lobby') {
@@ -1255,7 +1271,7 @@ export class GameEngine {
       this.act(zoneId, { type: 'reveal', index: col + row * config.boardColumns }, eventElapsedMs); return;
     }
     if (gameId === 'zero_sum_grid' || gameId === 'cube_count') {
-      const rect = layout.interactiveRect;
+      const rect = layout.numericKeypadRect ?? layout.interactiveRect;
       if (!inside(rect)) return;
       const columns = layout.numericKeypadColumns, rows = layout.numericKeypadRows;
       const col = Math.floor((x - rect.x) / rect.width * columns);
@@ -1305,8 +1321,9 @@ export class GameEngine {
   }
 
   touchHoldTarget(zoneId, position) {
-    if (this.state.phase === 'tutorial' && this.state.participants[zoneId] && position.v >= 0.72 && position.v < 0.94) {
-      return { phase: 'tutorial', kind: 'complete-tutorial', rect: { x: 0, y: 0.72, width: 1, height: 0.22 } };
+    const rect = { x: 0.25, y: 0.76, width: 0.5, height: 0.18 };
+    if (this.state.phase === 'tutorial' && zoneId === 'FLOOR' && this.pointInsideHoldTarget(rect, position)) {
+      return { phase: 'tutorial', kind: 'complete-tutorial', rect };
     }
     return null;
   }
@@ -1370,6 +1387,14 @@ export class GameEngine {
       const singleTouches = [];
       for (const [zoneId, touches] of zoneTouches) {
         if (touches.length > 1) {
+          if (this.state.phase === 'lobby') {
+            const choices = [...new Set(touches.map((touch) => this.lobbyGameAt(zoneId, touch.u, touch.v)).filter(Boolean))];
+            if (choices.length === 1) {
+              singleTouches.push(touches[0]);
+              continue;
+            }
+            if (choices.length === 0) continue;
+          }
           this.state.notice = `${zoneId} 同時觸碰多個按鍵；本批操作未計入。`;
           this.changed();
           continue;
@@ -1391,7 +1416,7 @@ export class GameEngine {
           const choiceZones = selections.filter((item) => item.gameId === choice).map((item) => item.touch.zoneId);
           if (choice === RANDOM_GAME_ID) this.selectRandomGame();
           else this.selectGame(choice);
-          this.recordPlayerInput(choiceZones[0] ?? null, {
+          this.recordPlayerInput(null, {
             type: choice === RANDOM_GAME_ID ? 'select-random-game' : 'select-game',
             gameId: this.state.selectedGame
           }, { phase: 'lobby', relatedZones: choiceZones });
@@ -1445,7 +1470,18 @@ export class GameEngine {
     const cadPoint = this.touchCadPoint(px);
     if (!cadPoint) return null;
     const { x: cadX, y: cadY } = cadPoint;
-    for (const zone of this.zones) {
+    const floor = this.layout.floorRect;
+    if (['game_preview', 'tutorial'].includes(this.state.phase) && floor && faceIndex === floor.face &&
+        cadX >= floor.rect.x && cadY >= floor.rect.y &&
+        cadX < floor.rect.x + floor.rect.width && cadY < floor.rect.y + floor.rect.height) {
+      return {
+        zoneId: 'FLOOR',
+        u: (cadX - floor.rect.x) / floor.rect.width,
+        v: (cadY - floor.rect.y) / floor.rect.height
+      };
+    }
+    const zones = this.state.phase === 'lobby' ? this.menuZones : this.zones;
+    for (const zone of zones) {
       for (const source of zone.sources) {
         if (source.face !== faceIndex || cadX < source.x || cadY < source.y ||
             cadX >= source.x + source.width || cadY >= source.y + source.height) continue;
@@ -1474,20 +1510,19 @@ export class GameEngine {
   }
 
   gamePreviewActionAt(u, v) {
-    if (v < 0.72 || v >= 0.94) return null;
+    if (v < 0.76 || v >= 0.94) return null;
     return u < 0.5 ? 'confirm' : 'cancel';
   }
 
   lobbyGameAt(zoneId, u, v) {
-    if (this.state.phase !== 'lobby' || !this.state.participants[zoneId]) return null;
+    if (this.state.phase !== 'lobby' || !this.state.participantIds.length) return null;
+    const index = this.menuZones.findIndex((zone) => zone.id === zoneId);
+    if (index < 0) return null;
     const layout = this.rules.common.layout;
     const x = u * layout.localDesignWidth, y = v * layout.localDesignHeight;
     const rect = layout.interactiveRect;
-    if (x < rect.x || y < rect.y || x >= rect.x + rect.width || y >= rect.y + rect.height) return null;
-    const col = Math.floor((x - rect.x) / rect.width * 2);
-    const row = Math.floor((y - rect.y) / rect.height * 4);
-    const index = row * 2 + col;
-    return index < this.gameOrder.length ? this.gameOrder[index] : index === 7 ? RANDOM_GAME_ID : null;
+    if (x < 0 || y < rect.y || x >= layout.localDesignWidth || y >= rect.y + rect.height) return null;
+    return index < this.gameOrder.length ? this.gameOrder[index] : index === this.gameOrder.length ? RANDOM_GAME_ID : null;
   }
 
   tick(deltaMs = null) {

@@ -43,6 +43,28 @@ function setTextIfChanged(node, value) {
   if (node && node.textContent !== value) node.textContent = value;
 }
 
+function renderSharedMenuZone(zone, option, index, total) {
+  if (!option) return null;
+  const node = el('section', 'zone shared-menu-zone');
+  node.dataset.menuZoneId = zone.id;
+  node.dataset.gameId = option.id;
+  node.style.cssText = rectStyle(zone.rect);
+  const inner = el('div', 'zone-inner');
+  const content = el('div', 'zone-content shared-menu-content');
+  content.style.width = '640px'; content.style.height = '640px';
+  content.style.transform = `rotate(${zone.rotationDegrees}deg)`;
+  const header = el('div', 'zone-header');
+  header.append(el('div', 'zone-name', '704 全場共用選單'));
+  header.append(el('div', 'zone-head', `共同選項 ${index + 1} / ${total}`));
+  const body = el('div', 'zone-body shared-menu-body');
+  const tile = el('div', `shared-game-tile${option.id === 'random' ? ' random-game' : ''}`);
+  tile.append(el('strong', '', option.name));
+  tile.append(el('small', '', option.id === 'random' ? '全體共同抽選一款遊戲' : `全體共同遊玩・${option.rounds} 輪`));
+  tile.append(el('span', 'shared-game-prompt', '觸碰此區域選擇'));
+  body.append(tile); content.append(header, body); inner.append(content); node.append(inner);
+  return node;
+}
+
 function renderZone(zone, view, data) {
   const node = el('section', 'zone'); node.dataset.zoneId = zone.id; node.style.cssText = rectStyle(zone.rect);
   const inner = el('div', 'zone-inner');
@@ -61,29 +83,23 @@ function renderZone(zone, view, data) {
   }
   if (data.phase === 'lobby') {
     header.append(el('div', 'zone-head', `累積 ${(panel.score ?? 0).toFixed(1)} 分`));
-    header.append(el('div', 'zone-detail', '玩家加入由工作人員控制'));
-    const grid = el('div', 'game-grid');
-    for (const game of data.availableGames ?? []) {
-      const tile = el('div', 'game-tile');
-      tile.append(el('span', '', game.name), el('small', '', `${game.rounds} 輪`)); grid.append(tile);
-    }
-    const randomTile = el('div', 'game-tile random-game');
-    randomTile.append(el('span', '', '隨機遊戲'), el('small', '', '抽選一款遊戲')); grid.append(randomTile);
-    body.append(grid); return node;
+    header.append(el('div', 'zone-detail', '全場共用選單・請共同決定一款'));
+    body.classList.add('zone-body-centered');
+    body.append(el('div', 'shared-menu-reminder', '本區遊戲選項與其他牆面選項共組一份全場選單。'));
+    return node;
   }
   if (data.phase === 'tutorial') {
     header.append(el('div', 'zone-head', gameNames[data.selectedGame] ?? '小遊戲'));
     const text = renderTutorial(data.selectedGame, data.gameRules?.games?.[data.selectedGame] ?? {});
-    const complete = el('div', 'tutorial-complete', '長按「完成」結束教學');
-    body.classList.add('tutorial-body'); body.append(text, complete); return node;
+    body.classList.add('tutorial-body');
+    body.append(text, el('div', 'tutorial-shared-hint', '全體共用：請到地板中央長踩「完成教學」按鈕。'));
+    return node;
   }
   if (data.phase === 'game_preview') {
     header.append(el('div', 'zone-head', gameNames[data.selectedGame] ?? '小遊戲'));
     body.classList.add('game-preview-body');
-    body.append(el('div', 'game-preview-copy', data.notice ?? '請確認遊戲或返回選單。'));
-    const controls = el('div', 'game-preview-controls');
-    controls.append(el('div', 'game-preview-confirm', '確定・進入教學'), el('div', 'game-preview-cancel', '取消・返回選單'));
-    body.append(controls); return node;
+    body.append(el('div', 'game-preview-copy', '請全體到地板中央共同確認，或返回共用選單。'));
+    return node;
   }
   if (data.phase === 'countdown') {
     const number = Math.max(1, Math.ceil((data.currentRound?.countdownMs ?? 0) / 1000));
@@ -108,7 +124,10 @@ function renderZone(zone, view, data) {
   if (round.gameId === 'minesweeper') {
     header.append(el('div', 'zone-detail', `安全格 ${panel.mine?.safeProgress ?? 0} / ${80 - (q.mineCount ?? 0)}　踩雷 ${panel.mine?.hits?.length ?? 0}　旗標 ${panel.mine?.flags?.length ?? 0}　罰時 ${secondsLeft(panel.mine?.penaltyMs ?? 0)}`));
   } else if (round.gameId === 'zero_sum_grid' || round.gameId === 'cube_count') {
-    header.append(el('div', 'zone-detail', `目前輸入：${panel.entry || '—'}${panel.lockRemainingMs > 0 ? `　鎖答 ${secondsLeft(panel.lockRemainingMs)}` : ''}`));
+    const numericEntryEnabled = Boolean(data.gameRules?.common?.layout?.numericEntryRect);
+    const lockText = panel.lockRemainingMs > 0 ? `鎖答 ${secondsLeft(panel.lockRemainingMs)}` : '';
+    header.append(el('div', `zone-detail${numericEntryEnabled ? ' numeric-lock-detail' : ''}`,
+      numericEntryEnabled ? lockText : `目前輸入：${panel.entry || '—'}${lockText ? `　${lockText}` : ''}`));
   } else if (round.gameId === 'memory_poker') {
     header.append(el('div', 'zone-detail', `已選 ${panel.selected?.length ?? 0} / 2　${panel.locked ? '已確認' : '確認後不可修改'}`));
   } else if (round.gameId === 'memory_sequence') {
@@ -121,7 +140,7 @@ function renderZone(zone, view, data) {
     body.append(el('div', 'floor-title', panel.eliminated ? '本輪結束' : '完成'), el('div', 'compact-info', '等待其他玩家')); return node;
   }
   if (round.gameId === 'minesweeper') renderMineZone(body, panel.mine, q);
-  else if (round.gameId === 'zero_sum_grid' || round.gameId === 'cube_count') renderKeypad(body, data.gameRules?.common?.layout);
+  else if (round.gameId === 'zero_sum_grid' || round.gameId === 'cube_count') renderKeypad(body, data.gameRules?.common?.layout, panel.entry, panel.lockRemainingMs);
   else if (round.gameId === 'solid_puzzle') renderChoices(body, q.choices ?? [], panel.selection, 'piece', panel.choiceOrder);
   else if (round.gameId === 'map_view') renderMapPlayer(body, q, panel.selection, gameConfig);
   else if (round.gameId === 'memory_poker') renderPokerZone(body, panel, q, round.elapsedMs, gameConfig);
@@ -144,9 +163,18 @@ function renderMineZone(body, mine = {}, q = {}) {
   body.append(board, el('div', 'ready-button mine-toolbar', `切換操作：${mine.mode === 'flag' ? '標旗' : '揭露'}`));
 }
 
-function renderKeypad(body, layout = {}) {
+function renderKeypad(body, layout = {}, entry = '', lockRemainingMs = 0) {
+  const entryRect = layout.numericEntryRect;
+  const keypadRect = layout.numericKeypadRect ?? layout.interactiveRect ?? { width: 640, height: 512 };
+  if (entryRect) {
+    const display = el('div', 'numeric-entry-display');
+    display.style.width = `${entryRect.width}px`; display.style.height = `${entryRect.height}px`;
+    display.append(el('div', 'numeric-entry-label', '目前輸入'), el('div', 'numeric-entry-value', entry || '—'));
+    body.append(display);
+  }
   const pad = el('div', 'number-pad');
-  const labels = { backspace: '刪除', clear: '清空', confirm: '確認' };
+  pad.style.width = `${keypadRect.width}px`; pad.style.height = `${keypadRect.height}px`;
+  const labels = { backspace: '更正', clear: '重作', confirm: '確定' };
   for (const key of layout.numericKeypadKeys ?? []) {
     if (key === 'spacer') { pad.append(el('div', 'key key-spacer')); continue; }
     const modifier = key === 'confirm' ? ' confirm' : key === 'clear' ? ' clear' : key === 'backspace' ? ' backspace' : '';
@@ -266,6 +294,39 @@ function sequencePhase(round, config) {
 
 function renderFloor(data) {
   floor.replaceChildren();
+  floor.classList.toggle('shared-floor-controls-active', ['game_preview', 'tutorial'].includes(data.phase));
+  if (data.phase === 'lobby') {
+    const joined = data.layout?.participantCount ?? 0;
+    const box = el('div', 'shared-floor-screen shared-lobby-floor');
+    box.append(el('div', 'floor-title', '704 全場共用遊戲選單'));
+    box.append(el('div', 'floor-subtitle', `周圍牆面上的選項合為一份選單；全體共同選擇同一款遊戲。已加入 ${joined} 位玩家，玩家加入由工作人員控制。`));
+    floor.append(box);
+    return;
+  }
+  if (data.phase === 'game_preview' && data.selectedGame) {
+    const guide = getGameTutorial(data.selectedGame, data.gameRules?.games?.[data.selectedGame] ?? {});
+    const box = el('div', 'shared-floor-screen shared-preview-floor');
+    box.append(el('div', 'floor-title', `${gameNames[data.selectedGame] ?? '小遊戲'}・遊戲介紹`));
+    box.append(el('div', 'shared-floor-description', `${guide.goal}　${guide.schedule}`));
+    if (data.notice) box.append(el('div', 'shared-floor-notice', data.notice));
+    const controls = el('div', 'shared-floor-controls');
+    controls.append(el('div', 'shared-floor-action shared-preview-confirm', '確定・進入教學'));
+    controls.append(el('div', 'shared-floor-action shared-preview-cancel', '取消・返回共用選單'));
+    box.append(controls);
+    floor.append(box);
+    return;
+  }
+  if (data.phase === 'tutorial' && data.selectedGame) {
+    const guide = getGameTutorial(data.selectedGame, data.gameRules?.games?.[data.selectedGame] ?? {});
+    const box = el('div', 'shared-floor-screen shared-tutorial-floor');
+    box.append(el('div', 'floor-title', '教學完成・全體共用'));
+    box.append(el('div', 'shared-floor-description', `讀完周圍牆面的操作說明後，任一玩家可在地板中央長踩完成。${guide.schedule}`));
+    const controls = el('div', 'shared-floor-controls shared-tutorial-controls');
+    controls.append(el('div', 'shared-floor-action shared-tutorial-complete', `長踩 ${data.gameRules?.common?.readyHoldSeconds ?? 1} 秒・完成教學`));
+    box.append(controls);
+    floor.append(box);
+    return;
+  }
   if (data.layout?.questionDisplayMode !== 'player-panels') {
     renderQuestionDisplay(data, floor);
     return;
@@ -349,9 +410,9 @@ function renderQuestionPanel(panel, data) {
   if (['paused', 'resume_countdown'].includes(data.phase)) {
     showTitle(data.phase === 'paused' ? '遊戲暫停' : '即將繼續', data.notice ?? '', content);
   } else if (data.phase === 'lobby') {
-    showTitle(`${panel.playerId} 題目區`, '請在旁邊答題區選擇遊戲', content);
+    showTitle('全場共用遊戲選單', '請在周圍牆面共同選擇一款遊戲', content);
   } else if (data.phase === 'game_preview') {
-    showTitle(`${gameNames[data.selectedGame] ?? '小遊戲'}・遊戲介紹`, data.notice ?? '確認後進入教學；取消返回選單。', content);
+    showTitle(`${gameNames[data.selectedGame] ?? '小遊戲'}・遊戲介紹`, '請全體到地板中央共同確認或返回選單。', content);
   } else {
     renderQuestionDisplay(data, content);
   }
@@ -506,7 +567,7 @@ function createIsometricSvg(cells, options = {}) {
   for (const face of faces) {
     const polygon = document.createElementNS(ns, 'polygon');
     polygon.setAttribute('points', face.points.map(([x, y]) => `${offsetX + (x - minX) * scale},${offsetY + (y - minY) * scale}`).join(' '));
-    polygon.setAttribute('fill', face.fill); polygon.setAttribute('stroke', '#153249'); polygon.setAttribute('stroke-width', '0.045');
+    polygon.setAttribute('fill', face.fill); polygon.setAttribute('stroke', '#153249'); polygon.setAttribute('stroke-width', '0.135');
     svg.append(polygon);
   }
 
@@ -652,8 +713,16 @@ function render(data) {
   }
   const views = data.playerViews ?? {};
   const zones = $('#zones'); zones.replaceChildren();
-  for (const panel of data.questionPanels ?? []) zones.append(renderQuestionPanel(panel, data));
-  for (const zone of data.zones ?? []) zones.append(renderZone(zone, views, data));
+  if (data.phase === 'lobby') {
+    const options = [...(data.availableGames ?? []), { id: 'random', name: '隨機遊戲', rounds: null }];
+    for (const [index, zone] of (data.menuZones ?? []).entries()) {
+      const node = renderSharedMenuZone(zone, options[index], index, options.length);
+      if (node) zones.append(node);
+    }
+  } else {
+    for (const panel of data.questionPanels ?? []) zones.append(renderQuestionPanel(panel, data));
+    for (const zone of data.zones ?? []) zones.append(renderZone(zone, views, data));
+  }
   for (const area of data.reservedRects ?? []) zones.append(renderReservedArea(area));
   renderFloor(data);
   const overlay = $('#overlay');
@@ -676,8 +745,12 @@ function updateVolatileStageText(data) {
       if (!panel?.joined) continue;
       setTextIfChanged(zone.querySelector('.zone-head strong'), timer);
       if (round.gameId === 'zero_sum_grid' || round.gameId === 'cube_count') {
-        const lockText = panel.lockRemainingMs > 0 ? `　鎖答 ${secondsLeft(panel.lockRemainingMs)}` : '';
-        setTextIfChanged(zone.querySelector('.zone-detail'), `目前輸入：${panel.entry || '—'}${lockText}`);
+        setTextIfChanged(zone.querySelector('.numeric-entry-value'), panel.entry || '—');
+        const lockText = panel.lockRemainingMs > 0 ? `鎖答 ${secondsLeft(panel.lockRemainingMs)}` : '';
+        setTextIfChanged(zone.querySelector('.numeric-lock-detail'), lockText);
+        if (!data.gameRules?.common?.layout?.numericEntryRect) {
+          setTextIfChanged(zone.querySelector('.zone-detail'), `目前輸入：${panel.entry || '—'}${lockText ? `　${lockText}` : ''}`);
+        }
       }
     }
     return;
