@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { GameEngine, GAME_IDS, evaluateFiveCardHand, preflightGameQuestions } from '../src/game-engine.mjs';
 import { cubeColumnsAreReadable } from '../src/cube-visibility.mjs';
 import { createStageSnapshot } from '../src/stage-view.mjs';
+import { handleMouseInput } from '../src/mouse-input.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const rules = JSON.parse(fs.readFileSync(path.join(ROOT, 'config/game-rules.v1.json'), 'utf8'));
@@ -1654,4 +1655,121 @@ test('two controls touched in one player zone batch are rejected together', () =
 
   assert.deepEqual(engine.state.currentRound.players.P1.revealed, []);
   assert.match(engine.state.notice, /同時觸碰多個按鍵/);
+});
+
+for (const phase of ['game_preview', 'tutorial', 'countdown', 'playing', 'round_results', 'paused', 'resume_countdown']) {
+  test(`return to lobby from ${phase} preserves standings and starts the next game cleanly`, () => {
+    const engine = createEngine('cube_count', { participants: ['P1', 'P2', 'P3'] });
+    submitNumber(engine, 'P1', engine.state.currentRound.question.total);
+    engine.tick(100);
+    submitNumber(engine, 'P2', engine.state.currentRound.question.total);
+    engine.finishRound('deadline');
+    assert.equal(engine.state.phase, 'round_results');
+    const rankings = engine.finalRankings();
+    assert.ok(rankings[0].score > 0);
+    const results = structuredClone(engine.state.results);
+    const sessionId = engine.state.sessionId;
+    if (phase !== 'round_results') {
+      engine.returnToLobby();
+      engine.selectGame('zero_sum_grid');
+      if (phase !== 'game_preview') engine.confirmGameSelection();
+      if (!['game_preview', 'tutorial'].includes(phase)) engine.startAfterTutorial();
+      if (['playing', 'paused', 'resume_countdown'].includes(phase)) advance(engine, 3_000);
+      if (['paused', 'resume_countdown'].includes(phase)) engine.pause();
+      if (phase === 'resume_countdown') engine.resume();
+    }
+    assert.equal(engine.state.phase, phase);
+    const elapsed = engine.state.sessionElapsedMs;
+    engine.returnToLobby();
+    assert.equal(engine.state.phase, 'lobby');
+    assert.equal(engine.state.sessionId, sessionId);
+    assert.equal(engine.state.sessionElapsedMs, elapsed);
+    assert.deepEqual(engine.finalRankings(), rankings);
+    assert.deepEqual(engine.state.results, results);
+    assert.deepEqual(engine.state.participantIds, ['P1', 'P2', 'P3']);
+    assert.equal(engine.state.currentRound, null);
+    assert.equal(engine.state.resumeTarget, null);
+    assert.equal(engine.state.pauseInfo, null);
+    assert.equal(engine.contacts.size, 0);
+    assert.ok(Object.values(engine.state.participants).every((p) => !p.ready));
+    engine.tick(6_000);
+    assert.equal(engine.state.phase, 'lobby', 'stale countdowns must not start another round');
+    const restored = new GameEngine({ rules, zones, initialState: structuredClone(engine.state), onSave() {} });
+    assert.equal(restored.state.phase, 'lobby');
+    assert.deepEqual(restored.finalRankings(), rankings);
+    engine.selectGame('cube_count');
+    engine.confirmGameSelection();
+    engine.startAfterTutorial();
+    advance(engine, 3_000);
+    assert.equal(engine.state.currentRound.round, 1);
+    assert.deepEqual(engine.finalRankings(), rankings);
+  });
+}
+
+test('return to lobby rejects inactive and expired sessions without changing scores', () => {
+  const engine = new GameEngine({ rules, zones, onSave() {} });
+  assert.throws(() => engine.returnToLobby(), /進行中的場次/);
+  startReadySession(engine);
+  assert.throws(() => engine.returnToLobby(), /進行中的場次/);
+  engine.join('P1');
+  engine.selectGame('cube_count');
+  engine.state.sessionElapsedMs = rules.common.sessionDurationSeconds * 1000;
+  const before = structuredClone(engine.state);
+  assert.throws(() => engine.returnToLobby(), /場次時間已到/);
+  assert.deepEqual(engine.state, before);
+  engine.endSession();
+  assert.throws(() => engine.returnToLobby(), /進行中的場次/);
+});
+
+test('mouse testing selects any shared wall and handles real-duration holds and cancelled drags', () => {
+  let now = 0;
+  const engine = new GameEngine({ rules, zones, clock: () => now, onSave() {} });
+  startReadySession(engine);
+  engine.join('P1');
+  const mouse = (event, revision = engine.phaseRevision) => handleMouseInput(engine, { ...event, phaseRevision: revision }, 'test');
+  const choice = menuTouchEvent(1, 'down', 0.5, 0.6, 'P3', engine);
+  assert.throws(() => mouse(choice), /開啟滑鼠測試/);
+  engine.mouseTestEnabled = true;
+  mouse(choice);
+  assert.equal(engine.state.selectedGame, engine.gameOrder[2], 'unoccupied walls remain usable in the shared menu');
+  mouse(menuTouchEvent(1, 'down', 0.25, 0.6, 'P3', engine));
+  // Release before another press; one mouse has one active contact.
+  mouse({ phase: 'cancel' });
+  mouse(menuTouchEvent(1, 'down', 0.25, 0.6, 'P3', engine));
+  assert.equal(engine.state.phase, 'tutorial');
+  mouse({ phase: 'cancel' });
+  const hold = floorTouchEvent(1, 'down', 0.5, 0.85);
+  engine.touchReleaseTimeoutMs = 170;
+  mouse(hold); now += 500; mouse({ ...hold, phase: 'up' });
+  assert.equal(engine.state.phase, 'tutorial', 'short clicks do not complete teaching');
+  mouse(hold); now += 1500;
+  mouse(floorTouchEvent(1, 'move', 0.1, 0.3));
+  mouse({ ...hold, phase: 'up' });
+  assert.equal(engine.state.phase, 'tutorial', 'dragging out cancels a hold');
+  mouse(hold); now += rules.common.readyHoldSeconds * 1000;
+  mouse({ ...hold, phase: 'up' });
+  assert.equal(engine.state.phase, 'countdown', 'mouse holds have no physical release-delay subtraction');
+  assert.equal(engine.touchReleaseTimeoutMs, 170);
+});
+
+test('mouse input hits numeric keys across player layouts and ignores stale phases', () => {
+  for (const count of [1, 4, 8]) {
+    const engine = createEngine('cube_count', { participants: Array.from({ length: count }, (_, i) => `P${i + 1}`) });
+    engine.mouseTestEnabled = true;
+    const layout = rules.common.layout, rect = layout.numericKeypadRect;
+    for (const zoneId of engine.state.participantIds) {
+      const index = layout.numericKeypadKeys.indexOf('7');
+      const u = (rect.x + (index % layout.numericKeypadColumns + 0.5) * rect.width / layout.numericKeypadColumns) / 640;
+      const v = (rect.y + (Math.floor(index / layout.numericKeypadColumns) + 0.5) * rect.height / layout.numericKeypadRows) / 640;
+      const event = p1TouchEvent(1, 'down', u, v, zoneId, engine);
+      handleMouseInput(engine, { ...event, phaseRevision: engine.phaseRevision }, 'test');
+      handleMouseInput(engine, { ...event, phase: 'up', phaseRevision: engine.phaseRevision }, 'test');
+      assert.equal(engine.state.currentRound.players[zoneId].entry, '7', `${count} players / ${zoneId}`);
+    }
+    const revision = engine.phaseRevision;
+    engine.returnToLobby();
+    handleMouseInput(engine, { ...menuTouchEvent(1, 'down', 0.5, 0.6, 'P1', engine), phaseRevision: revision }, 'test');
+    assert.equal(engine.state.phase, 'lobby');
+    assert.throws(() => handleMouseInput(engine, { phase: 'down', px: [NaN, 1], phaseRevision: engine.phaseRevision }, 'test'), /位置/);
+  }
 });

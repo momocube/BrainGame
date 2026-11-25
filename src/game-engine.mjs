@@ -776,7 +776,8 @@ export class GameEngine {
 
   snapshot() {
     const state = structuredClone(this.state);
-    state.input = { ready: this.inputsReady, detail: this.inputDetail };
+    state.input = { ready: this.inputsReady, detail: this.inputDetail,
+      mouseTest: Boolean(this.mouseTestEnabled), phaseRevision: this.phaseRevision };
     state.remainingSessionMs = Math.max(0, this.rules.common.sessionDurationSeconds * 1000 - state.sessionElapsedMs);
     state.remainingRoundMs = this.state.phase === 'playing' && this.state.currentRound
       ? Math.max(0, this.state.currentRound.limitMs - this.state.currentRound.elapsedMs) : null;
@@ -883,15 +884,29 @@ export class GameEngine {
   }
 
   returnToLobby() {
-    if (!['game_preview', 'tutorial'].includes(this.state.phase)) throw new Error('只能在遊戲介紹或教學階段返回大廳');
+    if (!['game_preview', 'tutorial', 'countdown', 'playing', 'round_results', 'paused', 'resume_countdown'].includes(this.state.phase)) {
+      throw new Error('只能在進行中的場次回到大廳');
+    }
+    if (this.state.sessionExpired || this.state.sessionElapsedMs >= this.rules.common.sessionDurationSeconds * 1000) {
+      throw new Error('場次時間已到，請完成總結算');
+    }
+    const unfinishedRound = this.state.currentRound &&
+      !this.state.results.some((result) => result.roundId === this.state.currentRound.id);
+    this.state.currentRound = null;
     this.state.selectedGame = null;
     this.state.gameRoundIndex = 0;
+    this.state.resumeTarget = null;
+    this.state.countdownMs = null;
+    this.state.resultRemainingMs = null;
+    this.state.pauseInfo = null;
     this.state.readyIds = [];
     for (const id of this.state.participantIds) {
       if (this.state.participants[id]) this.state.participants[id].ready = false;
     }
     this.state.phase = 'lobby';
-    this.state.notice = '已返回大廳；玩家名單與分數保留。';
+    this.state.notice = `已回到大廳；玩家名單、已結算名次與累積分數保留。${unfinishedRound ? '未結算的本輪已取消。' : ''}`;
+    this.contacts.clear();
+    this.pendingRoundCheck = false;
     this.save();
   }
 

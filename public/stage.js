@@ -1,4 +1,5 @@
 import { CAD_SCENE, PROJECTION_CANVAS, calculateProjectionFit } from './projection-layout.mjs';
+import { installMouseInput } from './mouse-input.mjs';
 
 import { renderPerspectiveSceneSvg } from './map-scene.mjs';
 import { getGameTutorial } from './tutorial-content.mjs';
@@ -748,6 +749,8 @@ function render(data) {
   if (!data) return;
   const structureKey = stageStructureKey(data);
   state = data;
+  $('#mouse-test-hint').hidden = !data.input?.mouseTest;
+  venue.classList.toggle('mouse-test-enabled', Boolean(data.input?.mouseTest));
   if (structureKey === lastRenderedStructureKey) {
     updateVolatileStageText(data);
     return;
@@ -917,3 +920,6 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') reportStagePaint();
 });
 document.addEventListener('keydown', (event) => { if (event.key.toLowerCase() === 'f') document.documentElement.requestFullscreen?.(); });
+installMouseInput(venue, () => ({ enabled: state?.input?.mouseTest,
+  clientId: stageClientId, revision: state?.input?.phaseRevision }),
+  (message) => { $('#connection').textContent = message; });

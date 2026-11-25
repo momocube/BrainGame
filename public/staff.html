@@ -17,6 +17,7 @@
       <span id="touch-status" class="status-pill offline">TouchService 連線中</span>
       <span id="stage-status" class="status-pill offline">遊戲畫面未連線</span>
       <button id="open-stage" class="button secondary">開啟遊戲畫面</button>
+      <button id="mouse-test" class="button secondary" aria-pressed="false">開啟滑鼠測試</button>
       <button id="touch-diagnostics-open" class="button secondary">觸控校正</button>
       <button id="screen-settings" class="button secondary" hidden>螢幕設定</button>
       <button id="operation-manual" class="button secondary" hidden>操作手冊</button>
@@ -39,6 +40,7 @@
         <p id="start-session-help" class="muted" role="status">等待 TouchService 就緒後才能開始場次。</p>
         <button id="pause-session" class="button warning">暫停</button>
         <button id="resume-session" class="button primary">繼續場次</button>
+        <button id="return-lobby" class="button secondary" title="保留玩家名單、已結算名次與累積分數；未結算的本輪會取消">回到大廳</button>
         <button id="end-session" class="button danger">立即結束場次</button>
       </div>
       <div id="notice" class="notice">等待場次開始。</div>
@@ -50,7 +52,6 @@
       <div class="card-heading"><div><div class="eyebrow">GAME FLOW</div><h2>遊戲流程介入</h2></div><span id="game-flow-label" class="muted">請先開始場次</span></div>
       <div class="button-row">
         <button id="start-tutorial" class="button primary">代玩家開始教學</button>
-        <button id="return-lobby" class="button secondary">教學返回大廳</button>
         <button id="restart-round" class="button secondary">重開本輪</button>
         <button id="cancel-round" class="button secondary">作廢本輪並回大廳</button>
       </div>

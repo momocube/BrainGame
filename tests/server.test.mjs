@@ -936,3 +936,83 @@ test('a server process restart resumes from the last settled round and retries t
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
+
+test('mouse mode works without TouchService and the lobby API preserves persisted scores', async () => {
+  const port = await freePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const dataDir = fs.mkdtempSync(path.join(ROOT, 'tmp', 'mouse-server-test-'));
+  const { child, output } = startServerProcess({ port, dataDir, touchPort: await freePort() });
+  const abort = new AbortController();
+  let reader, heartbeat;
+  const post = async (url, body) => {
+    const response = await fetch(`${baseUrl}${url}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    return { status: response.status, ...(await response.json()) };
+  };
+  const control = async (action, extra = {}) => {
+    const result = await post('/api/control', { action, ...extra });
+    assert.equal(result.status, 200, result.error);
+    return result.state;
+  };
+  try {
+    await waitForHealth(baseUrl, child, output);
+    const events = await fetch(`${baseUrl}/api/events?view=stage`, { signal: abort.signal });
+    reader = events.body.getReader();
+    const clientId = await readStageClientId(reader);
+    await acknowledgeStagePaint(baseUrl, clientId);
+    heartbeat = setInterval(() => acknowledgeStagePaint(baseUrl, clientId).catch(() => {}), 500);
+    const disabled = await post('/api/mouse-input', { clientId, phase: 'down', px: [1000, 1000] });
+    assert.equal(disabled.status, 400);
+    await control('set-mouse-test', { enabled: true });
+    const started = await control('start-session');
+    assert.equal(started.input.ready, true);
+    assert.equal(started.input.mouseTest, true);
+    assert.equal((await post('/api/control', { action: 'set-mouse-test', enabled: false })).status, 400);
+    await control('join-zone', { zoneId: 'P1' });
+    await control('join-zone', { zoneId: 'P2' });
+    await control('select-game', { gameId: 'cube_count' });
+    await control('confirm-game-selection');
+    await control('start-after-tutorial');
+    const state = await waitUntil(() => fetch(`${baseUrl}/api/state`).then((r) => r.json()),
+      (s) => s.phase === 'playing', 'mouse-only countdown', 120);
+    const rules = JSON.parse(fs.readFileSync(path.join(ROOT, 'config/game-rules.v1.json'), 'utf8'));
+    const zone = state.zones.find((z) => z.id === 'P1');
+    const rect = rules.common.layout.numericKeypadRect;
+    const layout = rules.common.layout;
+    for (const key of [...String(state.currentRound.question.total), 'confirm']) {
+      const index = layout.numericKeypadKeys.indexOf(key);
+      const x = rect.x + (index % layout.numericKeypadColumns + 0.5) * rect.width / layout.numericKeypadColumns;
+      const y = rect.y + (Math.floor(index / layout.numericKeypadColumns) + 0.5) * rect.height / layout.numericKeypadRows;
+      const angle = zone.rotationDegrees * Math.PI / 180;
+      const cadX = zone.rect.x + zone.rect.width / 2 + (x - 320) * Math.cos(angle) - (y - 320) * Math.sin(angle);
+      const cadY = zone.rect.y + zone.rect.height / 2 + (x - 320) * Math.sin(angle) + (y - 320) * Math.cos(angle);
+      const px = [cadY, 3328 - cadX];
+      for (const phase of ['down', 'up']) {
+        const result = await post('/api/mouse-input', { clientId, phase, px, phaseRevision: state.input.phaseRevision });
+        assert.equal(result.status, 200, result.error);
+      }
+    }
+    const scored = await fetch(`${baseUrl}/api/state`).then((r) => r.json());
+    assert.equal(scored.phase, 'round_results');
+    assert.equal(scored.finalRankings[0].score, 1);
+    const lobby = await control('return-to-lobby');
+    assert.equal(lobby.phase, 'lobby');
+    assert.equal(lobby.sessionId, started.sessionId);
+    assert.deepEqual(lobby.finalRankings, scored.finalRankings);
+    assert.deepEqual(lobby.results, scored.results);
+    const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'session-state.json'), 'utf8'));
+    assert.equal(saved.phase, 'lobby');
+    assert.equal(saved.participants.P1.totalHalfPoints, 2);
+    assert.deepEqual(saved.results, scored.results);
+    assert.equal((await post('/api/mouse-input', { clientId: 'unknown', phase: 'down', px: [1, 1] })).status, 400);
+    await control('end-session');
+    const disabledState = await control('set-mouse-test', { enabled: false });
+    assert.equal(disabledState.input.mouseTest, false);
+    assert.equal(disabledState.input.ready, false);
+  } finally {
+    clearInterval(heartbeat);
+    if (reader) await reader.cancel().catch(() => {});
+    abort.abort();
+    child.kill();
+    await new Promise((resolve) => { if (child.exitCode !== null) resolve(); else child.once('exit', resolve); });
+  }
+});

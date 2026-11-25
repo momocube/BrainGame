@@ -7,6 +7,7 @@ import { GameEngine, GAME_NAMES, GAME_IDS, preflightGameQuestions } from './game
 import { createStageSnapshot } from './stage-view.mjs';
 import { TouchFrameGuard, validateTouchServiceHello } from './touch-protocol.mjs';
 import { TouchDiagnostics } from './touch-diagnostics.mjs';
+import { handleMouseInput } from './mouse-input.mjs';
 import { createOperationalLog } from './operational-log.mjs';
 import { createSessionArchiveStore } from './session-archive.mjs';
 import { readTouchInteractionEnabled } from './touch-service-status.mjs';
@@ -248,6 +249,14 @@ async function readBody(request) {
 
 function performControl(body) {
   switch (body.action) {
+    case 'set-mouse-test':
+      if (!['idle', 'final_results'].includes(engine.state.phase)) throw new Error('請在待機或總結算時切換滑鼠測試模式');
+      if (typeof body.enabled !== 'boolean') throw new Error('滑鼠測試開關必須為布林值');
+      engine.mouseTestEnabled = body.enabled;
+      engine.clearTouchContacts();
+      updateTouchReadiness();
+      publish();
+      break;
     case 'start-session':
       engine.assertCanStartSession();
       if (!stageReadyClients().length) throw new Error('遊戲畫面尚未完成繪製，無法開始場次。');
@@ -263,7 +272,13 @@ function performControl(body) {
     case 'return-to-standby': engine.returnToStandby(); break;
     case 'cancel-round': engine.cancelRound(); break;
     case 'restart-round': engine.restartRound(); break;
-    case 'return-to-lobby': engine.returnToLobby(); break;
+    case 'return-to-lobby':
+      if (['paused', 'resume_countdown'].includes(engine.state.phase)) {
+        if (!engine.inputsReady) throw new Error(`TouchService 尚未就緒，無法回到大廳：${engine.inputDetail}`);
+        if (!stageReadyClients().length) throw new Error('遊戲畫面尚未完成繪製或回報逾時，無法回到大廳。');
+      }
+      engine.returnToLobby();
+      break;
     case 'confirm-game-selection': engine.confirmGameSelection(); break;
     case 'start-after-tutorial': engine.startAfterTutorial(); break;
     case 'select-game': engine.selectGame(body.gameId); break;
@@ -408,9 +423,16 @@ const server = http.createServer(async (request, response) => {
       publishStaffState();
       return sendJson(response, 200, { ok: true });
     }
+    if (request.method === 'POST' && url.pathname === '/api/mouse-input') {
+      const payload = await readBody(request);
+      const client = [...subscribers].find((item) => item.view === 'stage' && item.id === payload.clientId);
+      if (!client) throw new Error('遊戲畫面連線已失效，請重新開啟遊戲畫面');
+      handleMouseInput(engine, payload, client.id);
+      return sendJson(response, 200, { ok: true });
+    }
     if (request.method === 'POST' && url.pathname === '/api/control') {
       const payload = await readBody(request);
-      if (payload.action === 'start-session') {
+      if (payload.action === 'start-session' && !engine.mouseTestEnabled) {
         await refreshTouchServiceConfig(touchSocket, { forceFresh: true });
       }
       return sendJson(response, 200, { ok: true, state: performControl(payload) });
@@ -430,6 +452,11 @@ let shuttingDown = false;
 let retryDelayMs = 1000;
 let lastTouchFrameAt = 0;
 let touchStatus = '尚未連線';
+function setInputReadiness(ready, detail) {
+  engine.setInputStatus(engine.mouseTestEnabled || ready,
+    engine.mouseTestEnabled ? '滑鼠測試模式（不需 TouchService）' : detail);
+}
+
 function updateTouchReadiness() {
   const socketOpen = touchSocket?.readyState === 1;
   const configReady = touchInteractionEnabled === true;
@@ -452,7 +479,7 @@ function updateTouchReadiness() {
       : `TouchService v1 / venue ${touchVerifiedVenue}・互動已啟用`;
   }
   touchStatus = detail;
-  engine.setInputStatus(ready, detail);
+  setInputReadiness(ready, detail);
   publishDiagnostics();
 }
 
@@ -523,17 +550,17 @@ function connectTouchService() {
   if (typeof WebSocket !== 'function') {
     touchStatus = '此 Node.js 未提供 WebSocket client';
     operationalLog.write({ level: 'error', type: 'touch-service', action: 'websocket-unavailable', sessionId: engine.state.sessionId });
-    engine.setInputStatus(false, touchStatus);
+    setInputReadiness(false, touchStatus);
     setTimeout(connectTouchService, 10_000).unref();
     return;
   }
   touchStatus = `連線中：${TOUCH_URL}`;
-  engine.setInputStatus(false, touchStatus);
+  setInputReadiness(false, touchStatus);
   let socket;
   try { socket = new WebSocket(TOUCH_URL); }
   catch (error) {
     touchStatus = `TouchService 連線失敗：${error.message}`;
-    engine.setInputStatus(false, touchStatus);
+    setInputReadiness(false, touchStatus);
     setTimeout(connectTouchService, retryDelayMs).unref();
     retryDelayMs = Math.min(10_000, retryDelayMs * 2);
     return;
@@ -553,7 +580,7 @@ function connectTouchService() {
         if (message.type === 'hello') {
           validateTouchServiceHello(message, touchProfile);
           touchFrameGuard.reset();
-          engine.clearTouchContacts();
+          if (!engine.mouseTestEnabled) engine.clearTouchContacts();
           touchDiagnostics.reset();
           verified = true;
           verifiedVenue = message.venue;
@@ -606,7 +633,7 @@ function connectTouchService() {
       touchDiagnostics.accept(message);
       publishDiagnostics();
       if (frameRecovered) updateTouchReadiness();
-      engine.handleTouchFrame(message);
+      if (!engine.mouseTestEnabled) engine.handleTouchFrame(message);
     } catch (error) {
       touchStatus = `TouchService 訊息錯誤：${error.message}`;
       touchProtocolReady = false;
@@ -631,7 +658,7 @@ function connectTouchService() {
     touchFrameTimedOut = false;
     touchVerifiedVenue = null;
     engine.touchReleaseTimeoutMs = 0;
-    engine.clearTouchContacts();
+    if (!engine.mouseTestEnabled) engine.clearTouchContacts();
     touchDiagnostics.clear();
     touchFrameGuard.reset();
     if (!shuttingDown) {

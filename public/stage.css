@@ -210,3 +210,7 @@
 .round-result-question .floor-subtitle{font-size:.9em}
 .round-result-question .floor-board{width:min(86%,50vh);height:70%;max-height:100%}
 .round-results-screen>.scoreboard{width:100%;height:54%;max-height:54%;flex:0 1 54%;gap:1.5%}
+
+#mouse-test-hint{position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:20;padding:8px 14px;border:1px solid #f1c65b;border-radius:8px;background:#32270ee8;color:#ffe6a3;font:14px/1.4 sans-serif;pointer-events:none;white-space:nowrap}
+#mouse-test-hint[hidden]{display:none}
+#venue.mouse-test-enabled{cursor:pointer;user-select:none;touch-action:none}
