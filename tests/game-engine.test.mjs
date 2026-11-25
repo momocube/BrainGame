@@ -1813,7 +1813,7 @@ test('tutorial circle reports hold duration and cancels on leaving the circle, r
   engine.touchReleaseTimeoutMs = 170;
   const send = (phase, u, v) => engine.handleTouchFrame(touchFrame([floorTouchEvent(91, phase, u, v)], phase === 'up' ? [] : [91]));
   send('down', 0.5, 0.5); now = 670;
-  assert.deepEqual(engine.snapshot().tutorialHold, { active: true, heldMs: 500, requiredMs: rules.common.readyHoldSeconds * 1000 });
+  assert.deepEqual(engine.snapshot().tutorialHold, { active: true, heldMs: 670, requiredMs: rules.common.readyHoldSeconds * 1000 });
   send('move', 0.37, 0.31); // Inside the circle's bounding box, outside its round boundary.
   assert.equal(engine.snapshot().tutorialHold.active, false);
   send('move', 0.5, 0.5); now = 4000; send('up', 0.5, 0.5);
@@ -1829,7 +1829,9 @@ test('tutorial circle reports hold duration and cancels on leaving the circle, r
   assert.equal(engine.snapshot().tutorialHold.heldMs, 0);
   mouse('down'); now += 200; mouse('up');
   assert.equal(engine.state.phase, 'tutorial', 'short press resets progress');
-  mouse('down'); now += rules.common.readyHoldSeconds * 1000; mouse('up');
+  mouse('down'); now += rules.common.readyHoldSeconds * 1000; engine.tick();
+  assert.equal(engine.state.phase, 'countdown', 'a held pointer starts the game without release');
+  mouse('up');
   assert.equal(engine.state.phase, 'countdown');
   assert.equal(engine.snapshot().tutorialHold.active, false);
 });
@@ -1852,13 +1854,11 @@ for (const gameId of GAME_IDS) {
     gesture('request');
     assert.equal(engine.state.phase, 'playing');
     assert.equal(engine.state.exitConfirmation.roundId, engine.state.currentRound.id);
-    gesture('confirm', 300);
-    assert.equal(engine.state.phase, 'playing', 'a short confirmation click cannot exit');
     gesture('cancel');
     assert.equal(engine.state.exitConfirmation, null);
     assert.equal(engine.state.phase, 'playing');
     gesture('request');
-    gesture('confirm', 1170);
+    gesture('confirm', 30);
     assert.equal(engine.state.phase, 'lobby');
     assert.equal(engine.state.exitConfirmation, null);
     assert.equal(engine.state.currentRound, null);
@@ -1868,38 +1868,54 @@ for (const gameId of GAME_IDS) {
   });
 }
 
-test('exit confirmation cancels on drag-out, phase changes, restart, and rejects inactive inputs', () => {
+test('exit confirmation freezes all clocks and gameplay; cancellation and phase changes clear it safely', () => {
   const engine = createEngine('cube_count', { participants: ['P1', 'P2'] });
-  const send = (id, phase, action, alive = phase === 'up' ? [] : [id]) =>
-    engine.handleTouchFrame(touchFrame([exitTouchEvent(id, phase, action)], alive));
+  let now = 0; engine.clock = () => now; engine.lastTick = now;
+  const send = (id, phase, action) => engine.handleTouchFrame(touchFrame([exitTouchEvent(id, phase, action)], phase === 'up' ? [] : [id]));
   send(1, 'down', 'request'); send(1, 'up', 'request');
-  engine.act('P1', { key: '7' });
-  engine.tick(100);
-  assert.equal(engine.state.currentRound.players.P1.entry, '7', 'confirmation does not block normal gameplay');
-  assert.equal(engine.state.currentRound.elapsedMs, 100);
-  send(2, 'down', 'confirm'); engine.contacts.get('2').started -= 2000;
-  send(2, 'move', 'cancel'); send(2, 'up', 'confirm');
-  assert.equal(engine.state.phase, 'playing');
-  assert.ok(engine.state.exitConfirmation);
-  send(3, 'down', 'confirm'); engine.contacts.get('3').started -= 2000;
-  engine.finishRound('deadline');
+  const session = engine.state.sessionElapsedMs, elapsed = engine.state.currentRound.elapsedMs;
+  engine.act('P1', { key: '7' }); now += 15000; engine.tick();
+  assert.equal(engine.state.currentRound.players.P1.entry, '', 'confirmation blocks answers');
+  assert.equal(engine.state.sessionElapsedMs, session); assert.equal(engine.state.currentRound.elapsedMs, elapsed);
+  assert.equal(engine.activeElapsedAt(now), elapsed);
+  send(2, 'down', 'cancel'); send(2, 'up', 'cancel');
   assert.equal(engine.state.exitConfirmation, null);
-  engine.prepareRound(); advance(engine, 3000);
-  send(3, 'up', 'confirm');
-  assert.equal(engine.state.phase, 'playing', 'an old held contact cannot exit the new round');
+  now += 100; engine.tick();
+  assert.equal(engine.state.currentRound.elapsedMs, elapsed + 100, 'cancel resumes without charging paused time');
+  send(3, 'down', 'request'); send(3, 'up', 'request');
+  engine.pause(); assert.equal(engine.state.exitConfirmation, null);
   send(4, 'down', 'request'); send(4, 'up', 'request');
+  send(5, 'down', 'cancel'); send(5, 'up', 'cancel');
+  assert.equal(engine.state.phase, 'paused', 'cancel preserves a staff or system pause');
+  send(6, 'down', 'request'); send(6, 'up', 'request');
   const restored = new GameEngine({ rules, zones, initialState: structuredClone(engine.state), onSave() {} });
   assert.equal(restored.state.exitConfirmation, null);
-  engine.pause();
-  assert.equal(engine.state.exitConfirmation, null);
-  assert.equal(engine.canvasPosition(zones.sharedExitControl.face, exitTouchEvent(5, 'down', 'request').px), null);
   engine.returnToLobby();
-  engine.coordinateAction(EXIT_CONTROL_ZONE, 0.5, 0.5, 2000);
-  assert.equal(engine.state.phase, 'lobby');
-  assert.equal(engine.state.exitConfirmation, null);
+  send(7, 'down', 'request'); send(7, 'up', 'request');
+  assert.equal(engine.state.exitConfirmation, null, 'lobby exit control stays inactive');
 });
 
-test('mouse uses the same fixed exit strip and long-press confirmation as TouchService', () => {
+for (const phase of ['game_preview','tutorial','countdown','playing','round_results','paused','resume_countdown']) {
+  test(`exit prompt freezes and cancels cleanly in ${phase}`, () => {
+    const engine = createEngine('cube_count');
+    if (phase === 'round_results') engine.finishRound('deadline');
+    else if (phase === 'paused' || phase === 'resume_countdown') { engine.pause(); if (phase === 'resume_countdown') engine.resume(); }
+    else if (phase !== 'playing') { engine.returnToLobby(); engine.selectGame('cube_count'); if(phase !== 'game_preview') engine.confirmGameSelection(); if(phase === 'countdown') engine.startAfterTutorial(); }
+    let now = 0; engine.clock = () => now; engine.lastTick = now;
+    engine.requestPlayerExit();
+    assert.ok(engine.state.exitConfirmation);
+    const session = engine.state.sessionElapsedMs, round = structuredClone(engine.state.currentRound), resultTime=engine.state.resultRemainingMs, countdown=engine.state.countdownMs;
+    now += 20000; engine.tick();
+    assert.equal(engine.state.sessionElapsedMs, session); assert.deepEqual(engine.state.currentRound,round);
+    assert.equal(engine.state.resultRemainingMs,resultTime); assert.equal(engine.state.countdownMs,countdown);
+    engine.cancelPlayerExit(); assert.equal(engine.state.phase,phase);
+    engine.requestPlayerExit();
+    engine.coordinateAction(EXIT_CONTROL_ZONE, .5, EXIT_BUTTONS.confirm.y + EXIT_BUTTONS.confirm.height / 2);
+    assert.equal(engine.state.phase,'lobby');
+  });
+}
+
+test('mouse uses the same fixed exit strip and tap confirmation as TouchService', () => {
   const engine = createEngine('cube_count');
   engine.mouseTestEnabled = true;
   let now = 0; engine.clock = () => now; engine.lastTick = now;
@@ -1907,6 +1923,6 @@ test('mouse uses the same fixed exit strip and long-press confirmation as TouchS
     handleMouseInput(engine, { ...exitTouchEvent(1, phase, action), phaseRevision: revision }, 'exit-test');
   send('down', 'request'); send('up', 'request');
   assert.ok(engine.state.exitConfirmation);
-  send('down', 'confirm'); now += 1000; send('up', 'confirm');
+  send('down', 'confirm'); assert.equal(engine.state.phase, 'lobby'); send('up', 'confirm');
   assert.equal(engine.state.phase, 'lobby');
 });

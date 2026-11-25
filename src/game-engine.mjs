@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { resolvePlayerLayout } from './player-layouts.mjs';
 import { cubeColumnsAreReadable } from './cube-visibility.mjs';
 import { validateGameRules } from './game-rules.mjs';
-import { EXIT_CONTROL_ZONE, EXIT_CONFIRM_HOLD_MS, EXIT_BUTTONS, canPlayerExit, exitActionAt } from '../public/exit-control.mjs';
+import { EXIT_CONTROL_ZONE, canPlayerExit, exitActionAt } from '../public/exit-control.mjs';
 import { tutorialHoldTarget } from '../public/tutorial-control.mjs';
 import {
   EDGE_BLANK, EDGE_LINE, clueCountsForLoop, countSolutions, edgeCount, generateSlitherlinkPuzzle,
@@ -814,11 +814,11 @@ export class GameEngine {
     state.input = { ready: this.inputsReady, detail: this.inputDetail,
       mouseTest: Boolean(this.mouseTestEnabled), phaseRevision: this.phaseRevision };
     state.sharedExitControl = structuredClone(this.zoneConfig.sharedExitControl ?? null);
-    const tutorialContacts = this.state.phase === 'tutorial' ? [...this.contacts.values()].filter((contact) =>
+    const tutorialContacts = this.state.phase === 'tutorial' && !this.state.exitConfirmation ? [...this.contacts.values()].filter((contact) =>
       !contact.cancelled && contact.phaseRevision === this.phaseRevision && contact.holdTarget?.kind === 'complete-tutorial') : [];
     state.tutorialHold = {
       active: tutorialContacts.length > 0,
-      heldMs: Math.max(0, ...tutorialContacts.map((contact) => this.clock() - contact.started - (contact.releaseDelayMs ?? 0))),
+      heldMs: Math.max(0, ...tutorialContacts.map((contact) => this.clock() - contact.started)),
       requiredMs: this.rules.common.readyHoldSeconds * 1000
     };
     state.remainingSessionMs = Math.max(0, this.rules.common.sessionDurationSeconds * 1000 - state.sessionElapsedMs);
@@ -937,6 +937,7 @@ export class GameEngine {
     }
     const unfinishedRound = this.state.currentRound &&
       !this.state.results.some((result) => result.roundId === this.state.currentRound.id);
+    this.state.exitConfirmation = null;
     this.state.currentRound = null;
     this.state.selectedGame = null;
     this.state.gameRoundIndex = 0;
@@ -952,6 +953,30 @@ export class GameEngine {
     this.state.notice = `已回到大廳；玩家名單、已結算名次與累積分數保留。${unfinishedRound ? '未結算的本輪已取消。' : ''}`;
     this.contacts.clear();
     this.pendingRoundCheck = false;
+    this.save();
+  }
+
+  requestPlayerExit() {
+    if (this.state.exitConfirmation || !canPlayerExit(this.state, this.rules.common.sessionDurationSeconds * 1000)) return;
+    const phase = this.state.phase;
+    this.tick();
+    if (phase !== this.state.phase || !canPlayerExit(this.state, this.rules.common.sessionDurationSeconds * 1000)) return;
+    this.state.exitConfirmation = { phase, roundId: this.state.currentRound?.id ?? null, notice: this.state.notice };
+    this.state.notice = '遊戲已暫停；請確認是否全體退出並回到大廳。';
+    this.phaseRevision++;
+    this.contacts.clear();
+    this.recordPlayerInput(null, { type: 'request-exit-game' });
+    this.save();
+  }
+
+  cancelPlayerExit() {
+    if (!this.state.exitConfirmation) return;
+    this.state.notice = this.state.exitConfirmation.notice;
+    this.state.exitConfirmation = null;
+    this.lastTick = this.clock();
+    this.phaseRevision++;
+    this.contacts.clear();
+    this.recordPlayerInput(null, { type: 'cancel-exit-game' });
     this.save();
   }
 
@@ -1055,6 +1080,7 @@ export class GameEngine {
   }
 
   prepareRound() {
+    this.state.exitConfirmation = null;
     const gameId = this.state.selectedGame;
     if (!gameId) throw new Error('尚未選擇遊戲');
     if (!this.state.participantIds.length) throw new Error('沒有已加入玩家');
@@ -1098,6 +1124,7 @@ export class GameEngine {
   completeSharedTutorial() {
     if (this.state.phase !== 'tutorial') throw new Error('目前不在教學準備階段');
     if (!this.state.participantIds.length) throw new Error('尚無玩家加入，無法開始遊戲');
+    this.contacts.clear();
     this.state.readyIds = [...this.state.participantIds];
     this.state.notice = '全體共用地板按鈕已完成教學；即將倒數 3 秒。';
     this.prepareRound();
@@ -1139,6 +1166,7 @@ export class GameEngine {
   }
 
   act(zoneId, action, eventElapsedMs = null) {
+    if (this.state.exitConfirmation) return;
     if (action.type === 'join') return this.join(zoneId);
     if (action.type === 'ready') return this.setReady(zoneId);
     if (this.state.phase !== 'playing') throw new Error('現在不是作答時間');
@@ -1298,24 +1326,19 @@ export class GameEngine {
     const phase = this.state.phase;
     if (zoneId === EXIT_CONTROL_ZONE) {
       if (!canPlayerExit(this.state, this.rules.common.sessionDurationSeconds * 1000)) return;
-      const confirming = this.state.exitConfirmation?.roundId === this.state.currentRound.id;
+      const confirming = Boolean(this.state.exitConfirmation);
       const action = exitActionAt(u, v, confirming);
       if (action === 'request') {
-        this.state.exitConfirmation = { roundId: this.state.currentRound.id };
-        this.phaseRevision++;
-        this.recordPlayerInput(null, { type: 'request-exit-game' });
-        this.save();
+        this.requestPlayerExit();
       } else if (action === 'cancel') {
-        this.state.exitConfirmation = null;
-        this.phaseRevision++;
-        this.recordPlayerInput(null, { type: 'cancel-exit-game' });
-        this.save();
-      } else if (action === 'confirm' && heldMs >= EXIT_CONFIRM_HOLD_MS) {
+        this.cancelPlayerExit();
+      } else if (action === 'confirm') {
         this.recordPlayerInput(null, { type: 'confirm-exit-game' });
         this.returnToLobby();
       }
       return;
     }
+    if (this.state.exitConfirmation) return;
     if (zoneId === 'FLOOR') {
       if (phase === 'tutorial' &&
           this.pointInsideHoldTarget(tutorialHoldTarget(this.layout.floorRect.rect), { u, v }) &&
@@ -1361,6 +1384,9 @@ export class GameEngine {
       this.act(zoneId, { type: 'reveal', index: col + row * config.boardColumns }, eventElapsedMs); return;
     }
     if (gameId === 'zero_sum_grid' || gameId === 'cube_count') {
+      if (layout.numericConfirmRect && inside(layout.numericConfirmRect)) {
+        this.act(zoneId, { key: 'confirm' }, eventElapsedMs); return;
+      }
       const rect = layout.numericKeypadRect ?? layout.interactiveRect;
       if (!inside(rect)) return;
       const columns = layout.numericKeypadColumns, rows = layout.numericKeypadRows;
@@ -1413,20 +1439,26 @@ export class GameEngine {
   activeElapsedAt(timestamp = this.clock()) {
     const round = this.state.currentRound;
     if (this.state.phase !== 'playing' || !round) return null;
-    return Math.min(round.limitMs, round.elapsedMs + Math.max(0, timestamp - this.lastTick));
+    return Math.min(round.limitMs, round.elapsedMs + (this.state.exitConfirmation ? 0 : Math.max(0, timestamp - this.lastTick)));
   }
 
   touchHoldTarget(zoneId, position) {
-    if (zoneId === EXIT_CONTROL_ZONE && this.state.phase === 'playing' &&
-        this.state.exitConfirmation?.roundId === this.state.currentRound?.id &&
-        exitActionAt(position.u, position.v, true) === 'confirm') {
-      return { phase: 'playing', kind: 'confirm-exit-game', rect: EXIT_BUTTONS.confirm };
-    }
     const rect = tutorialHoldTarget(this.layout.floorRect.rect);
     if (this.state.phase === 'tutorial' && zoneId === 'FLOOR' && this.pointInsideHoldTarget(rect, position)) {
       return { phase: 'tutorial', kind: 'complete-tutorial', rect };
     }
     return null;
+  }
+
+  completeHeldTutorial(now = this.clock()) {
+    if (this.state.phase !== 'tutorial' || this.state.exitConfirmation) return false;
+    const contact = [...this.contacts.values()].find((item) => !item.cancelled &&
+      item.phaseRevision === this.phaseRevision && item.holdTarget?.kind === 'complete-tutorial' &&
+      now - item.started >= this.rules.common.readyHoldSeconds * 1000);
+    if (!contact) return false;
+    this.recordPlayerInput(null, { type: 'complete-tutorial' }, { phase: 'tutorial', relatedZones: [...this.state.participantIds] });
+    this.completeSharedTutorial();
+    return true;
   }
 
   pointInsideHoldTarget(rect, position) {
@@ -1487,6 +1519,7 @@ export class GameEngine {
     }
     const alive = new Set(frame.alive.map(String));
     for (const id of this.contacts.keys()) if (!alive.has(id)) this.contacts.delete(id);
+    if (this.completeHeldTutorial(receivedAt)) return;
     if (this.state.phase === 'tutorial') this.changed();
     this.batchDepth++;
     try {
@@ -1553,7 +1586,9 @@ export class GameEngine {
         }
       }
       for (const touch of singleTouches) {
-        try { this.coordinateAction(touch.zoneId, touch.u, touch.v, touch.heldMs, touch.eventElapsedMs); }
+        try {
+          if (touch.phaseRevision === this.phaseRevision) this.coordinateAction(touch.zoneId, touch.u, touch.v, touch.heldMs, touch.eventElapsedMs);
+        }
         catch { /* Stale and out-of-phase touches are ignored safely. */ }
       }
     } finally {
@@ -1588,6 +1623,7 @@ export class GameEngine {
         u: exitControl.rotationDegrees === 180 ? 1 - u : u,
         v: exitControl.rotationDegrees === 180 ? 1 - v : v };
     }
+    if (this.state.exitConfirmation) return null;
     const floor = this.layout.floorRect;
     if (this.state.phase === 'tutorial' && floor && faceIndex === floor.face &&
         cadX >= floor.rect.x && cadY >= floor.rect.y &&
@@ -1668,6 +1704,7 @@ export class GameEngine {
   tick(deltaMs = null) {
     const tickAt = this.clock();
     try {
+    if (this.state.exitConfirmation) return;
     if (this.state.phase === 'idle' || this.state.phase === 'final_results' || this.state.phase === 'paused') return;
     const d = deltaMs == null
       ? Math.max(0, tickAt - this.lastTick)
@@ -1698,6 +1735,7 @@ export class GameEngine {
         return;
       }
     } else if (this.state.phase === 'tutorial' && this.contacts.size) {
+      if (this.completeHeldTutorial(tickAt)) return;
       this.changed();
     } else if (this.state.phase === 'countdown') {
       this.state.currentRound.countdownMs -= d;

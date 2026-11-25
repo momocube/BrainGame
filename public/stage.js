@@ -33,7 +33,7 @@ function paintTutorialProgress() {
   button.style.setProperty('--hold-progress', `${percent}%`);
   button.setAttribute('aria-valuenow', String(Math.floor(percent)));
   setTextIfChanged(button.querySelector('.tutorial-hold-time'), `${(elapsed / 1000).toFixed(1)} / ${(hold.requiredMs / 1000).toFixed(1)} 秒`);
-  setTextIfChanged(button.querySelector('.tutorial-hold-label'), percent >= 100 ? '放開開始' : '長按開始');
+  setTextIfChanged(button.querySelector('.tutorial-hold-label'), percent >= 100 ? '開始遊戲' : '長按開始');
 }
 function animateTutorialProgress() {
   paintTutorialProgress();
@@ -262,8 +262,14 @@ function renderKeypad(body, layout = {}, entry = '', lockRemainingMs = 0) {
   const pad = el('div', 'number-pad');
   pad.style.width = `${keypadRect.width}px`; pad.style.height = `${keypadRect.height}px`;
   const labels = { backspace: '更正', clear: '重作', confirm: '確定' };
+  if (layout.numericConfirmRect) {
+    const r = layout.numericConfirmRect;
+    const confirm = el('div', 'key confirm numeric-confirm', '確定');
+    confirm.style.cssText = `left:${r.x}px;top:${r.y - (layout.interactiveRect?.y ?? 128)}px;width:${r.width}px;height:${r.height}px`;
+    body.append(confirm);
+  }
   for (const key of layout.numericKeypadKeys ?? []) {
-    if (key === 'spacer') { pad.append(el('div', 'key key-spacer')); continue; }
+    if (key === 'spacer' || key === 'confirm' && layout.numericConfirmRect) { pad.append(el('div', 'key key-spacer')); continue; }
     const modifier = key === 'confirm' ? ' confirm' : key === 'clear' ? ' clear' : key === 'backspace' ? ' backspace' : '';
     pad.append(el('div', `key${modifier}`, labels[key] ?? key));
   }
@@ -424,7 +430,7 @@ function renderFloor(data) {
     button.setAttribute('aria-valuemin', '0'); button.setAttribute('aria-valuemax', '100');
     const label = el('div', 'tutorial-hold-content');
     label.append(el('strong', 'tutorial-hold-label', '長按開始'), el('span', 'tutorial-hold-time'),
-      el('small', '', '持續按住・滿圈後放開'));
+      el('small', '', '持續按住・滿圈即開始'));
     button.append(label); controls.append(button);
     box.append(controls);
     floor.append(box);
@@ -571,7 +577,7 @@ function renderMineSolution(q = {}) {
   wrap.append(board); return wrap;
 }
 function renderZeroGrid(q = {}, answer = null) {
-  const wrap = el('div', 'floor-stack');
+  const wrap = el('div', 'floor-stack zero-grid');
   wrap.append(el('div', 'floor-title', answer ? `答案：${answer.count} 個` : '數字方格'), el('div', 'floor-subtitle', '計算所有總和為 0 的 2×2 方格（可重疊）'));
   const solved = new Set();
   for (const [x, y] of answer?.blocks ?? []) for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) solved.add((y + dy) * 10 + x + dx);
@@ -826,7 +832,7 @@ function renderRoundResult(data, target = floor) {
   wrap.append(grid); target.append(wrap);
 }
 function renderFinalResult(data, target = floor) {
-  const wrap = el('div', 'floor-stack'); wrap.append(el('div', 'floor-title', '本場總成績'));
+  const wrap = el('div', 'floor-stack scoreboard-screen'); wrap.append(el('div', 'floor-title', '本場總成績'));
   const grid = el('div', 'result-grid scoreboard');
   const rankings = data.finalRankings ?? [];
   grid.style.gridTemplateColumns = `repeat(${scoreboardColumnCount(rankings.length)}, minmax(0, 1fr))`;
@@ -846,22 +852,25 @@ function renderReservedArea(item) {
 
 function renderExitControl(data) {
   const control = data.sharedExitControl;
-  if (!control || !canPlayerExit(data, data.gameRules.common.sessionDurationSeconds * 1000)) return null;
+  if (!control) return null;
+  const enabled = canPlayerExit(data, data.gameRules.common.sessionDurationSeconds * 1000);
   const node = el('section', 'shared-exit-control');
   node.style.cssText = rectStyle(control.rect);
   node.style.transform = `rotate(${control.rotationDegrees ?? 0}deg)`;
   node.setAttribute('aria-label', '全體退出小遊戲並回到大廳');
-  const confirming = data.exitConfirmation?.roundId === data.currentRound.id;
+  const confirming = Boolean(data.exitConfirmation);
+  node.classList.toggle('disabled', !enabled);
+  node.setAttribute('aria-disabled', String(!enabled));
   if (confirming) {
     node.classList.add('confirming');
     node.append(el('div', 'shared-exit-title', '全體退出'), el('div', 'shared-exit-note', '成績保留'));
   }
   for (const action of confirming ? ['confirm', 'cancel'] : ['request']) {
     const button = el('div', `shared-exit-button shared-exit-${action}`,
-      { request: '退出遊戲', confirm: '長按確認', cancel: '取消退出' }[action]);
+      { request: '退出遊戲', confirm: '確認退出', cancel: '取消' }[action]);
     const rect = EXIT_BUTTONS[action];
     button.style.cssText = `left:${rect.x * 100}%;top:${rect.y * 100}%;width:${rect.width * 100}%;height:${rect.height * 100}%`;
-    button.setAttribute('aria-label', action === 'confirm' ? '長按一秒後放開，全體回到大廳；保留已結算成績，取消未結算本輪' : button.textContent);
+    button.setAttribute('aria-label', action === 'confirm' ? '確認全體回到大廳；保留已結算成績，取消未結算本輪' : button.textContent);
     node.append(button);
   }
   return node;
@@ -874,6 +883,7 @@ function render(data) {
   tutorialProgress = { ...data.tutorialHold, active: data.phase === 'tutorial' && Boolean(data.tutorialHold?.active), receivedAt: performance.now() };
   $('#mouse-test-hint').hidden = !data.input?.mouseTest;
   venue.classList.toggle('mouse-test-enabled', Boolean(data.input?.mouseTest));
+  venue.classList.toggle('exit-confirming', Boolean(data.exitConfirmation));
   if (structureKey === lastRenderedStructureKey) {
     updateVolatileStageText(data);
     return;

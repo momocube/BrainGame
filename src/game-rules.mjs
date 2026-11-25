@@ -220,6 +220,21 @@ function validateCommon(common) {
   for (const key of ['0','1','2','3','4','5','6','7','8','9','backspace','clear','confirm']) {
     if (keyCounts.get(key) !== 1) throw new Error(`common.layout.numericKeypadKeys 必須恰好包含 ${key}`);
   }
+  if (layout.numericConfirmRect) {
+    const confirm = layout.numericConfirmRect, keypad = layout.numericKeypadRect ?? layout.interactiveRect;
+    assertRect(confirm, 'common.layout.numericConfirmRect', width, height);
+    if (confirm.x < keypad.x || confirm.y < keypad.y || confirm.x + confirm.width > keypad.x + keypad.width ||
+        confirm.y + confirm.height > keypad.y + keypad.height) throw new Error('確認按鈕必須位於數字鍵盤內');
+    const cellWidth = keypad.width / layout.numericKeypadColumns, cellHeight = keypad.height / layout.numericKeypadRows;
+    for (const [index, key] of layout.numericKeypadKeys.entries()) {
+      if (key === 'spacer' || key === 'confirm') continue;
+      const x = keypad.x + index % layout.numericKeypadColumns * cellWidth;
+      const y = keypad.y + Math.floor(index / layout.numericKeypadColumns) * cellHeight;
+      if (confirm.x < x + cellWidth && confirm.x + confirm.width > x && confirm.y < y + cellHeight && confirm.y + confirm.height > y) {
+        throw new Error(`確認按鈕不可覆蓋數字鍵盤按鍵 ${key}`);
+      }
+    }
+  }
 }
 
 function validateGameStructure(gameId, config) {

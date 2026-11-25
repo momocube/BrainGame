@@ -1,5 +1,4 @@
 export const EXIT_CONTROL_ZONE = 'SHARED_EXIT';
-export const EXIT_CONFIRM_HOLD_MS = 1000;
 export const EXIT_BUTTONS = Object.freeze({
   request: { x: 0, y: 224 / 640, width: 1, height: 192 / 640 },
   confirm: { x: 0, y: 272 / 640, width: 1, height: 128 / 640 },
@@ -7,7 +6,7 @@ export const EXIT_BUTTONS = Object.freeze({
 });
 
 export function canPlayerExit(state, sessionLimitMs) {
-  return state.phase === 'playing' && Boolean(state.currentRound) &&
+  return ['game_preview', 'tutorial', 'countdown', 'playing', 'round_results', 'paused', 'resume_countdown'].includes(state.phase) &&
     !state.sessionExpired && state.sessionElapsedMs < sessionLimitMs;
 }
 

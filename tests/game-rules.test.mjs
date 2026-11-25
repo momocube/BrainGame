@@ -26,6 +26,7 @@ test('older saved rules without numeric field rectangles remain valid for recove
   const legacy = structuredClone(defaults);
   delete legacy.common.layout.numericEntryRect;
   delete legacy.common.layout.numericKeypadRect;
+  delete legacy.common.layout.numericConfirmRect;
   assert.equal(validateGameRules(legacy).rulesVersion, defaults.rulesVersion);
 });
 
@@ -148,8 +149,12 @@ test('numeric keypad layout puts confirm, correction, and restart in the approve
   assert.deepEqual(layout.numericEntryRect, { x: 0, y: 128, width: 640, height: 144 });
   assert.deepEqual(layout.numericKeypadRect, { x: 0, y: 272, width: 640, height: 368 });
   assert.equal(layout.numericKeypadKeys[3], 'confirm');
-  assert.equal(layout.numericKeypadKeys[7], 'backspace');
+  assert.equal(layout.numericKeypadKeys[11], 'backspace');
   assert.equal(layout.numericKeypadKeys[15], 'clear');
+  assert.deepEqual(layout.numericConfirmRect, { x: 480, y: 272, width: 160, height: 176 });
+  assert.ok(layout.numericConfirmRect.y >= 256 && layout.numericConfirmRect.y + layout.numericConfirmRect.height <= 448,
+    'confirmation stays within physical rows 4 through 6');
+  assert.throws(() => validateGameRules(changedRules(r => { r.common.layout.numericConfirmRect.x = 320; })), /不可覆蓋/);
 });
 
 test('board dimensions, mine start safety, sequence capacity, and answer grid stay compatible', () => {

@@ -700,7 +700,7 @@ test('HTTP service starts a session, handles random selection, and reports stage
     const fullArchive = await fetch(`${baseUrl}/api/sessions/${sessions[0].sessionId}.json`);
     assert.equal(fullArchive.status, 200);
     assert.match(fullArchive.headers.get('content-type'), /application\/json/);
-    assert.equal((await fullArchive.json()).rulesSnapshot.rulesVersion, '1.0.11');
+    assert.equal((await fullArchive.json()).rulesSnapshot.rulesVersion, '1.0.12');
     assert.equal((await fetch(`${baseUrl}/api/sessions/not-a-session.csv`)).status, 404);
 
     const selected = await postControl({ action: 'select-random-game' });

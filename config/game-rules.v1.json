@@ -1,5 +1,5 @@
 {
-  "rulesVersion": "1.0.11",
+  "rulesVersion": "1.0.12",
   "status": "prototype_in_progress",
   "updatedAt": "2026-11-25",
   "common": {
@@ -82,18 +82,24 @@
         "4",
         "5",
         "6",
-        "backspace",
+        "spacer",
         "7",
         "8",
         "9",
-        "spacer",
+        "backspace",
         "spacer",
         "0",
         "spacer",
         "clear"
       ],
       "orientation": "per_zone_player_facing_view",
-      "geometrySource": "TouchService_704_profile"
+      "geometrySource": "TouchService_704_profile",
+      "numericConfirmRect": {
+        "x": 480,
+        "y": 272,
+        "width": 160,
+        "height": 176
+      }
     }
   },
   "games": {
