@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { GameEngine, GAME_IDS, evaluateFiveCardHand, preflightGameQuestions } from '../src/game-engine.mjs';
+import { GameEngine, GAME_IDS, evaluateFiveCardHand, evaluateBestPokerHand, preflightGameQuestions } from '../src/game-engine.mjs';
 import { cubeColumnsAreReadable } from '../src/cube-visibility.mjs';
 import { createStageSnapshot } from '../src/stage-view.mjs';
 import { handleMouseInput } from '../src/mouse-input.mjs';
@@ -84,6 +84,7 @@ function completeRoundWithCorrectAnswer(engine) {
     advance(engine, (rules.games.memory_poker.communityRevealSeconds + rules.games.memory_poker.memorySeconds) * 1_000);
     engine.act('P1', { type: 'toggle_card', index: 0 });
     engine.act('P1', { type: 'toggle_card', index: 1 });
+    engine.act('P1', { type: 'toggle_card', index: 2 });
     advance(engine, (rules.games.memory_poker.selectionSeconds + rules.games.memory_poker.revealCountdownSeconds) * 1_000);
   } else if (gameId === 'memory_sequence') {
     advance(engine, round.question.memorySeconds * 1_000);
@@ -157,7 +158,7 @@ test('a round seed reproduces every game question and per-player variant', () =>
 
     assert.equal(first.seed, seed, `${gameId} records its seed`);
     assert.equal(first.rngAlgorithm, 'mulberry32-v1');
-    assert.equal(first.generatorVersion, '1.0.2');
+    assert.equal(first.generatorVersion, '1.0.3');
     assert.equal(first.rulesVersion, rules.rulesVersion);
     assert.equal(first.questionId, replay.questionId);
     assert.deepEqual(first.question, replay.question, `${gameId} question regenerates from its seed`);
@@ -255,8 +256,8 @@ test('difficulty boundaries generate valid questions for every round band', () =
       } else if (gameId === 'memory_poker') {
         const cards = [...question.cards, ...question.community];
         assert.equal(question.cards.length, 16);
-        assert.equal(question.community.length, 3);
-        assert.equal(new Set(cards.map((card) => card.label)).size, 19);
+        assert.equal(question.community.length, 4);
+        assert.equal(new Set(cards.map((card) => card.label)).size, 20);
       } else if (gameId === 'map_view') {
         assert.equal(question.choices.length, rules.games.map_view.optionCount);
         assert.equal(question.choices.filter((choice) => choice.correct).length, 1);
@@ -617,7 +618,7 @@ test('eight same-frame correct submissions are all accepted before the round set
   assert.ok(result.rows.every((row) => row.score === 3.5));
 });
 
-test('memory poker keeps memory and selection phases separate and locks two-card choices', () => {
+test('memory poker keeps memory and selection phases separate and locks three-card choices', () => {
   const engine = createEngine('memory_poker', { participants: ['P1', 'P2'] });
   const player = engine.state.currentRound.players.P1;
   engine.act('P1', { type: 'toggle_card', index: 0 });
@@ -627,11 +628,12 @@ test('memory poker keeps memory and selection phases separate and locks two-card
   engine.act('P1', { type: 'toggle_card', index: 0 });
   engine.act('P1', { type: 'toggle_card', index: 1 });
   engine.act('P1', { type: 'toggle_card', index: 2 });
-  assert.deepEqual(player.selected, [0, 1]);
+  engine.act('P1', { type: 'toggle_card', index: 3 });
+  assert.deepEqual(player.selected, [0, 1, 2]);
   engine.act('P1', { type: 'confirm' });
   engine.act('P1', { type: 'toggle_card', index: 0 });
   assert.equal(player.locked, true);
-  assert.deepEqual(player.selected, [0, 1]);
+  assert.deepEqual(player.selected, [0, 1, 2]);
 
   advance(engine, rules.games.memory_poker.selectionSeconds * 1_000 + rules.games.memory_poker.revealCountdownSeconds * 1_000);
   assert.equal(engine.state.phase, 'round_results');
@@ -643,7 +645,7 @@ test('memory poker settles equivalent hands as ties and gives incomplete selecti
   const engine = createEngine('memory_poker', { participants });
   const question = engine.state.currentRound.question;
   const card = (rank, suit) => ({ rank, suit, label: `${rank}${suit}` });
-  const community = [card(2, 'clubs'), card(3, 'diamonds'), card(4, 'hearts')];
+  const community = [card(2, 'clubs'), card(3, 'diamonds'), card(4, 'hearts'), card(11, 'clubs')];
   const selectedCards = [
     card(14, 'spades'), card(5, 'clubs'),
     card(8, 'spades'), card(8, 'diamonds'),
@@ -657,9 +659,9 @@ test('memory poker settles equivalent hands as ties and gives incomplete selecti
   question.community = community;
 
   advance(engine, (rules.games.memory_poker.communityRevealSeconds + rules.games.memory_poker.memorySeconds) * 1_000);
-  for (const index of [0, 1]) engine.act('P1', { type: 'toggle_card', index });
-  for (const index of [2, 3]) engine.act('P2', { type: 'toggle_card', index });
-  for (const index of [4, 5]) engine.act('P3', { type: 'toggle_card', index });
+  for (const index of [0, 1, 6]) engine.act('P1', { type: 'toggle_card', index });
+  for (const index of [2, 3, 6]) engine.act('P2', { type: 'toggle_card', index });
+  for (const index of [4, 5, 6]) engine.act('P3', { type: 'toggle_card', index });
   engine.act('P4', { type: 'toggle_card', index: 6 });
   for (const id of ['P1', 'P2', 'P3']) engine.act(id, { type: 'confirm' });
 
@@ -770,7 +772,7 @@ test('all seven games accept correct inputs from every TouchService player zone'
     } else if (gameId === 'memory_poker') {
       const config = rules.games.memory_poker;
       advance(engine, (config.communityRevealSeconds + config.memorySeconds) * 1_000);
-      for (const cardIndex of [0, 1]) tapSharedPoint(engine, config.cardGridRect,
+      for (const cardIndex of [0, 1, 2]) tapSharedPoint(engine, config.cardGridRect,
         cardIndex % config.memoryGridColumns, Math.floor(cardIndex / config.memoryGridColumns),
         config.memoryGridColumns, config.memoryGridRows);
       tapSharedPoint(engine, config.confirmRect, 0, 0, 1, 1);
@@ -1291,7 +1293,7 @@ test('stage projections keep active players active and withhold answer keys', ()
     assert.equal(Object.hasOwn(view.currentRound, 'questionId'), false, `${gameId} never exposes internal question metadata on the public stage`);
     if (gameId === 'minesweeper') assert.equal(view.currentRound.question.mines, undefined);
     if (gameId === 'memory_poker') {
-      assert.equal(view.currentRound.question.community.length, 3);
+      assert.equal(view.currentRound.question.community.length, 4);
       assert.equal(view.currentRound.question.cards, null);
       assert.equal(player.hand, undefined);
     }
@@ -2033,6 +2035,7 @@ test('poker reveals community before memory, gates selection, and preserves comm
   assert.deepEqual(view().community, community);
   engine.act('P1', { type: 'toggle_card', index: 0 });
   engine.act('P1', { type: 'toggle_card', index: 1 });
+  engine.act('P1', { type: 'toggle_card', index: 2 });
   advance(engine, config.selectionSeconds * 1000);
   assert.equal(view().stage, 'reveal');
   assert.equal(engine.state.currentRound.players.P1.locked, true);
@@ -2076,5 +2079,82 @@ test('games needing a shared question retain their normal wall or floor display'
     const view = createStageSnapshot(engine, rules, zones);
     assert.equal(view.layout.questionDisplayMode, count === 4 ? 'player-panels' : 'floor');
     assert.equal(view.questionPanels.length, count === 4 ? 4 : 0);
+  }
+});
+
+
+test('seven-card poker chooses the strongest five, including two triples and low aces', () => {
+  const cards = (ranks, suits = []) => ranks.map((rank, i) => ({ rank, suit: suits[i] ?? ['♠','♥','♦','♣'][i % 4], label: String(rank) }));
+  assert.deepEqual(evaluateBestPokerHand(cards([14,14,14,13,13,13,2])).key, [6,14,13]);
+  assert.deepEqual(evaluateBestPokerHand(cards([14,2,3,4,5,9,12])).key, [4,5]);
+  const flush = evaluateBestPokerHand(cards([14,13,12,11,10,2,3], ['♥','♥','♥','♥','♥','♠','♦']));
+  assert.deepEqual(flush.key, [8,14]);
+  assert.equal(flush.cards.length, 5);
+  assert.deepEqual(evaluateBestPokerHand(cards([9,9,9,9,14,13,2])).key, [7,9,14]);
+});
+
+test('poker requires three distinct cards, allows deselection, and rejects incomplete confirmation', () => {
+  const engine = createEngine('memory_poker');
+  const config = rules.games.memory_poker;
+  advance(engine, (config.communityRevealSeconds + config.memorySeconds) * 1000);
+  const player = engine.currentPlayer('P1');
+  for (const index of [0,1]) engine.act('P1', { type: 'toggle_card', index });
+  engine.act('P1', { type: 'confirm' });
+  assert.equal(player.locked, false);
+  engine.act('P1', { type: 'toggle_card', index: 0 });
+  assert.deepEqual(player.selected, [1]);
+  for (const index of [2,3,4]) engine.act('P1', { type: 'toggle_card', index });
+  assert.deepEqual(player.selected, [1,2,3]);
+  engine.act('P1', { type: 'confirm' });
+  assert.equal(player.locked, true);
+});
+
+test('slitherlink undo restores consecutive states, stays private, and resets each round', () => {
+  const engine = createEngine('slitherlink', { participants: ['P1','P2'] });
+  const player = engine.currentPlayer('P1');
+  const view = () => createStageSnapshot(engine, engine.rules, zones).playerViews.P1.slither;
+  engine.act('P1', { type: 'undo' });
+  assert.equal(player.moves, 0);
+  for (const index of [0,0,1]) engine.act('P1', { type: 'cycle_edge', index });
+  assert.deepEqual(player.edges.slice(0,2), [2,1]);
+  assert.equal(view().canUndo, true);
+  assert.equal(Object.hasOwn(view(), 'history'), false);
+  assert.equal(engine.currentPlayer('P2').history.length, 0);
+  const r = rules.games.slitherlink.undoRect;
+  engine.coordinateAction('P1', (r.x+r.width/2)/640, (r.y+r.height/2)/640);
+  assert.deepEqual(player.edges.slice(0,2), [2,0]);
+  engine.act('P1', { type: 'undo' });
+  assert.equal(player.edges[0], 1);
+  engine.act('P1', { type: 'undo' });
+  assert.equal(player.edges[0], 0);
+  assert.equal(view().canUndo, false);
+  engine.act('P1', { type: 'cycle_edge', index: 0 });
+  engine.restartRound();
+  assert.deepEqual(engine.currentPlayer('P1').history, []);
+  assert.ok(engine.currentPlayer('P1').edges.every(x => x === 0));
+});
+
+
+test('slitherlink cannot undo after completion or deadline', () => {
+  const engine = createEngine('slitherlink', { participants: ['P1','P2','P3'] });
+  const round = engine.state.currentRound;
+  for (const index of round.question.solution) engine.act('P1', {type:'cycle_edge',index});
+  const edges = [...round.players.P1.edges];
+  engine.act('P1', {type:'undo'});
+  assert.deepEqual(round.players.P1.edges, edges);
+  assert.equal(createStageSnapshot(engine, engine.rules, zones).playerViews.P1.slither.canUndo, false);
+  engine.act('P2', {type:'cycle_edge',index:0});
+  engine.act('P2', {type:'undo'}, round.limitMs);
+  assert.equal(round.players.P2.edges[0], 1);
+});
+
+
+test('new solid puzzles avoid distractors with identical orthographic views', async () => {
+  const {orthographicSignature} = await import('../public/solid-views.mjs');
+  for (const round of [1,7,14,20]) for (const seed of [1,2,3,4,5]) {
+    const engine = createEngine('solid_puzzle', {round,seed});
+    const q = engine.state.currentRound.question;
+    const target = orthographicSignature(q.missing);
+    assert.equal(q.choices.filter(c => orthographicSignature(c.cells) === target).length, 1);
   }
 });

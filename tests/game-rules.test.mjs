@@ -199,3 +199,21 @@ test('new mine board is 8 by 6 while old 10-by-8 saved session rules still valid
   });
   assert.equal(validateGameRules(legacy).games.minesweeper.boardColumns, 10);
 });
+
+
+test('poker requires four public cards and three selections; undo controls stay outside the board', () => {
+  for (const [field,value] of [['communityCards',3],['selectedCardsRequired',2]]) {
+    assert.throws(() => validateGameRules(changedRules(r => {r.games.memory_poker[field]=value;})), /四張公共牌/);
+  }
+  assert.throws(() => validateGameRules(changedRules(r => {
+    r.games.slitherlink.undoRect = {...r.games.slitherlink.boardRect};
+  })), /上一步按鈕/);
+});
+
+
+test('legacy 3+2 poker snapshots remain valid for recovery while new defaults use 4+3', () => {
+  assert.equal(defaults.games.memory_poker.communityCards, 4);
+  assert.equal(defaults.games.memory_poker.selectedCardsRequired, 3);
+  const legacy = changedRules(r => { r.games.memory_poker.communityCards=3; r.games.memory_poker.selectedCardsRequired=2; });
+  assert.equal(validateGameRules(legacy).games.memory_poker.selectedCardsRequired, 2);
+});

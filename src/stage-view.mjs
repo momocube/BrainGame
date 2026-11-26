@@ -69,7 +69,8 @@ export function createStageSnapshot(engine, rules, zones) {
           : player.values.map((value) => value > 0 && value <= player.progress ? value : 0)
       };
     } else if (gameId === 'slitherlink') {
-      view.slither = { edges: [...player.edges], moves: player.moves };
+      view.slither = { edges: [...player.edges], moves: player.moves,
+        canUndo: snapshot.phase === 'playing' && player.doneAtMs === null && Boolean(player.history?.length) };
     }
     playerViews[zoneId] = view;
   }

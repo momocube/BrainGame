@@ -30,12 +30,12 @@ function zero(step) {
   const values=Array(25).fill(9);Object.assign(values,{6:1,7:-1,11:-1,12:1});
   return svg(grid(values,5,{x:165,y:15,size:62,highlight:step>0?[6,7,11,12]:[]})+(step===0?text(320,370,'找總和為 0 的 2×2 方格',26):step===1?text(320,370,'1 − 1 − 1 + 1 = 0',32,'#ffdf70'):confirm('輸入 1 → 確定')));
 }
-const community=['A♥','K♥','Q♥'];
+const community=['A♥','K♥','Q♥','2♣'];
 const cards=['J♥','10♥','3♣','4♦','5♠','6♥','7♣','8♦','9♠','2♥','3♦','4♠','5♣','6♦','7♠','8♣'];
 function poker(step) {
-  let content=community.map((v,i)=>rect(185+i*94,12,86,70,'#fff7e9')+text(228+i*94,47,v,30,'#b12c49')).join('');
-  if(step===0)content+=text(320,205,'先看這三張公共牌',32)+text(320,260,'再記憶 16 張牌的位置',26,'#a9bed9');
-  else {content+=grid(step===1?cards:cards.map((_,i)=>String.fromCharCode(65+i)),4,{x:200,y:98,size:60,highlight:step===2?[0,1]:[]});if(step===2)content+=confirm('選 2 張 → 確定');else content+=text(320,370,'記住能搭配公共牌的位置',26);}
+  let content=community.map((v,i)=>rect(138+i*94,12,86,70,'#fff7e9')+text(181+i*94,47,v,30,'#b12c49')).join('');
+  if(step===0)content+=text(320,205,'先看這四張公共牌',32)+text(320,260,'再記憶 16 張牌的位置',26,'#a9bed9');
+  else {content+=grid(step===1?cards:cards.map((_,i)=>String.fromCharCode(65+i)),4,{x:200,y:98,size:60,highlight:step===2?[0,1,2]:[]});if(step===2)content+=confirm('選 3 張 → 確定');else content+=text(320,370,'記住能搭配公共牌的位置',26);}
   return svg(content);
 }
 function sequence(step) {
@@ -64,8 +64,8 @@ const stories={
   minesweeper:{steps:['先踩「起」','切換模式插旗','翻開所有安全格'],draw:mine},
   zero_sum_grid:{steps:['找 2×2 方格','四個數字相加為 0','輸入總數，按確定'],draw:zero},
   cube_count:{steps:['看清楚方塊堆疊','分層數，包含遮住的','輸入總數，按確定']},
-  solid_puzzle:{steps:['觀察黃色缺口','找出能填入的零件','點選零件，按確定']},
-  memory_poker:{steps:['先看三張公共牌','記憶 16 張牌的位置','蓋牌後選兩張，按確定'],draw:poker},
+  solid_puzzle:{steps:['看前、側、上三視圖','找出能填入的零件','點選零件，按確定']},
+  memory_poker:{steps:['先看四張公共牌','記憶 16 張牌的位置','蓋牌後選三張，按確定'],draw:poker},
   map_view:{steps:['記住前方景象','比對位置與朝向','點選答案，按確定'],draw:map},
   memory_sequence:{steps:['記住數字與位置','蓋牌後從 1 開始','依序點完全部數字'],draw:sequence},
   slitherlink:{steps:['看數字決定邊數','點邊畫線或打叉','連成一個封閉圈'],draw:slither}

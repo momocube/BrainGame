@@ -355,11 +355,22 @@ function validateGameStructure(gameId, config) {
       throw new Error('數迴棋盤格必須是正方形');
     }
     if (rect.y < 128) throw new Error('數迴棋盤不可進入第 9、10 排狀態區');
+    if (config.undoRect) {
+      const undo = config.undoRect;
+      assertRect(undo, 'slitherlink.undoRect', 640, 640);
+      if (undo.y < 128 || (undo.x < rect.x + rect.width && undo.x + undo.width > rect.x &&
+          undo.y < rect.y + rect.height && undo.y + undo.height > rect.y)) {
+        throw new Error('數迴上一步按鈕不可覆蓋棋盤或狀態區');
+      }
+    }
   }
   if (gameId === 'memory_poker') {
     if (config.communityRevealSeconds !== undefined) assertInteger(config.communityRevealSeconds, 'memory_poker.communityRevealSeconds', 0, 60);
-    if (config.deckSize !== 52 || config.jokers !== 0 || config.selectedCardsRequired !== 2) {
-      throw new Error('記憶撲克需使用 52 張標準牌、無鬼牌並選取兩張');
+    // Keep already-running legacy sessions recoverable; new sessions use the 4+3 defaults.
+    const supportedDeal = (config.communityCards === 4 && config.selectedCardsRequired === 3) ||
+      (config.communityCards === 3 && config.selectedCardsRequired === 2);
+    if (config.deckSize !== 52 || config.jokers !== 0 || !supportedDeal) {
+      throw new Error('記憶撲克需使用 52 張標準牌、無鬼牌、四張公共牌並選取三張');
     }
     assertInteger(config.incompletePoints, 'memory_poker.incompletePoints', 0, 10000);
     if (config.memoryCards + config.communityCards > config.deckSize ||

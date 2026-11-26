@@ -1,3 +1,4 @@
+import { orthographicSvg } from './solid-views.mjs';
 import { createIdleParticles } from './idle-scene.mjs';
 import { pokerTiming, pokerStage } from './poker-timing.mjs';
 import { CAD_SCENE, PROJECTION_CANVAS, calculateProjectionFit } from './projection-layout.mjs';
@@ -137,19 +138,11 @@ function renderTutorialSolid(gameId, step) {
       ['上下層都要數', '底層 2 ＋ 上層 1 ＝ 3', '輸入 3 → 確定'][step]));
   } else {
     const missing = [[0,0,1],[1,0,1],[0,1,1],[0,0,2]];
-    if (step === 0) {
-      const solid = [];
-      for (let z=0;z<3;z++) for(let y=0;y<2;y++) for(let x=0;x<2;x++) {
-        if (!missing.some(c=>c[0]===x&&c[1]===y&&c[2]===z)) solid.push([x,y,z]);
-      }
-      box.append(createIsometricSvg(solid, { bounds:[2,2,3], wireframeVoxels:missing, outlineBounds:true,
-        palette:{top:'#b4e9ff',sideX:'#368cfa',sideY:'#174bad',edge:'#07162f'},
-        viewWidth:640,viewHeight:320,margin:25,label:'藍色方塊與黃色待補缺口' }));
-    } else box.append(createIsometricSvg(missing.map(([x,y,z])=>[x,y,z-1]), {
-      viewWidth:640,viewHeight:320,margin:25,label:'可填入缺口的四格零件'
-    }));
+    const views = el('div', 'tutorial-orthographic');
+    views.innerHTML = orthographicSvg(missing, step === 0 ? { bounds: [2,2,3], target: true } : {});
+    box.append(views);
     box.append(el('div', step === 2 ? 'tutorial-demo-confirm' : 'tutorial-demo-caption',
-      ['黃色實線是缺口', '找出相同形狀的零件', '選取零件 → 確定'][step]));
+      ['前、側、上：黃色是缺口投影', '找出相同形狀的零件', '選取零件 → 確定'][step]));
   }
   return box;
 }
@@ -246,7 +239,9 @@ function renderZone(zone, view, data) {
   const timer = round.gameId === 'memory_poker' ? pokerPhase(round.elapsedMs, gameConfig)
     : round.gameId === 'memory_sequence' ? sequencePhase(round, gameConfig) : secondsLeft(round.limitMs - round.elapsedMs);
   header.classList.add('player-game-header');
-  header.append(el('div', 'player-game-title', gameNames[round.gameId]));
+  const title = el('div', 'player-game-title');
+  title.append(el('span', '', gameNames[round.gameId]), el('span', 'player-round-progress', `${round.round}/${gameConfig.rounds}`));
+  header.append(title);
   const clock = el('div', 'player-game-clock');
   clock.append(el('span', 'player-time-label'), el('strong', 'player-time-value'), el('span', '', '秒'));
   header.append(clock); updatePlayerClock(clock, timer);
@@ -258,11 +253,17 @@ function renderZone(zone, view, data) {
     header.append(el('div', `zone-detail${numericEntryEnabled ? ' numeric-lock-detail' : ''}`,
       numericEntryEnabled ? lockText : `目前輸入：${panel.entry || '—'}${lockText ? `　${lockText}` : ''}`));
   } else if (round.gameId === 'memory_poker') {
-    header.append(el('div', 'zone-detail', `第 ${round.round} 輪`));
+    header.append(el('div', 'zone-detail', `${gameConfig.communityCards} 張公共牌＋${gameConfig.selectedCardsRequired} 張自選牌，取最佳 5 張`));
   } else if (round.gameId === 'memory_sequence') {
-    const hearts = '♥'.repeat(panel.sequence?.hearts ?? 0) || '♡♡♡';
-    header.append(el('div', 'zone-detail', hearts + '　' + (round.elapsedMs < (q.memorySeconds ?? 0) * 1000
-      ? '記憶數字位置' : `下一個：${(panel.sequence?.progress ?? 0) + 1}　最佳：${panel.sequence?.bestProgress ?? 0}`)));
+    header.classList.add('sequence-game-header');
+    const hearts = el('div', 'sequence-hearts');
+    const remaining = panel.sequence?.hearts ?? 0;
+    hearts.setAttribute('aria-label', `剩餘 ${remaining} 顆愛心`);
+    for (let i = 0; i < Math.min(gameConfig.heartsPerRound ?? 3, 5); i++) hearts.append(el('span', i < remaining ? 'heart-full' : 'heart-empty', i < remaining ? '♥' : '♡'));
+    if ((gameConfig.heartsPerRound ?? 3) > 5) hearts.textContent = `♥ × ${remaining}`;
+    clock.append(hearts);
+    header.append(el('div', 'zone-detail', round.elapsedMs < (q.memorySeconds ?? 0) * 1000
+      ? '記憶數字位置' : `下一個：${(panel.sequence?.progress ?? 0) + 1}　最佳：${panel.sequence?.bestProgress ?? 0}`));
   } else if (round.gameId === 'slitherlink') {
     const edges = panel.slither?.edges ?? [];
     header.append(el('div', 'zone-detail',
@@ -339,7 +340,16 @@ function renderSlitherlinkZone(body, slither = {}, q = {}, config = {}, solution
     rect: config.boardRect ?? { x: 80, y: 144, width: 480, height: 480 },
     viewBox: '0 128 640 512', className: 'slither-svg', label: '數迴作答盤'
   });
+  body.classList.add('slither-body');
   body.append(board);
+  if (!solution && config.undoRect) {
+    const undo = el('div', 'slither-undo' + (slither.canUndo ? '' : ' disabled'), '↶ 上一步');
+    const rect = config.undoRect;
+    undo.style.cssText = `left:${rect.x}px;top:${rect.y - 128}px;width:${rect.width}px;height:${rect.height}px`;
+    undo.setAttribute('role', 'button');
+    undo.setAttribute('aria-disabled', String(!slither.canUndo));
+    body.append(undo);
+  }
 }
 
 function renderMineZone(body, mine = {}, q = {}, config = {}, layout = {}) {
@@ -444,8 +454,8 @@ function renderMapPlayer(body, q = {}, selection = null, config = {}) {
 }
 
 function renderShapeCells(cells) {
-  const view = createIsometricSvg(cells, { viewWidth: 220, viewHeight: 132, margin: 14 });
-  view.classList.add('piece-svg');
+  const view = el('div', 'piece-svg orthographic-piece');
+  view.innerHTML = orthographicSvg(cells);
   return view;
 }
 
@@ -468,11 +478,11 @@ function renderPokerZone(body, panel, q, elapsedMs, config) {
     if (memory && /[♦♥]/.test(label ?? '')) card.classList.add('red');
     grid.append(card);
   }
-  const info = el('div', `compact-info poker-info${memory ? '' : ' selection-count'}`, memory ? '記憶牌面與位置' : `已選 ${panel.selected?.length ?? 0} / 2`);
+  const info = el('div', `compact-info poker-info${memory ? '' : ' selection-count'}`, memory ? '記憶牌面與位置' : `已選 ${panel.selected?.length ?? 0} / ${config.selectedCardsRequired ?? 3}`);
   info.style.cssText = `position:absolute;left:${config.selectionInfoRect.x}px;top:${config.selectionInfoRect.y - 128}px;width:${config.selectionInfoRect.width}px;height:${config.selectionInfoRect.height}px`;
   body.append(grid, info);
   if (!memory && elapsedMs < selectionEnd) {
-    const confirm = el('div', 'ready-button confirm-button poker-confirm', panel.locked ? '已確認' : '選滿兩張後按確認');
+    const confirm = el('div', 'ready-button confirm-button poker-confirm', panel.locked ? '已確認' : `選滿 ${config.selectedCardsRequired ?? 3} 張後按確認`);
     const rect = config.confirmRect;
     confirm.style.cssText = `position:absolute;left:${rect.x}px;top:${rect.y - 128}px;width:${rect.width}px;height:${rect.height}px`;
     body.append(confirm);
@@ -901,24 +911,15 @@ function renderPuzzleFloor(q = {}, answer = null) {
     return wrap;
   }
   wrap.append(el('div', 'floor-title', '選出能補滿缺口的零件'), el('div', 'floor-subtitle', `目標外框 ${q.target?.join(' × ') ?? ''}　缺口 ${q.missing?.length ?? 0} 個方塊`));
-  const target = q.target ?? [3, 3, 2], missing = q.missing ?? [];
-  const missingSet = new Set(missing.map((cell) => cell.join(',')));
-  const solid = [];
-  for (let z = 0; z < target[2]; z++) for (let y = 0; y < target[1]; y++) for (let x = 0; x < target[0]; x++) {
-    if (!missingSet.has(`${x},${y},${z}`)) solid.push([x, y, z]);
-  }
-  wrap.append(createIsometricSvg(solid, {
-    azimuthDegrees: 45, elevationDegrees: 35, bounds: target,
-    wireframeVoxels: missing, outlineBounds: true,
-    palette: { top: '#b4e9ff', sideX: '#368cfa', sideY: '#174bad', edge: '#07162f' }, edgeWidth: '1.4',
-    viewWidth: 640, viewHeight: 420, margin: 28, className: 'puzzle-target-svg',
-    label: '立體外框與待補缺口'
-  }));
-  wrap.append(el('div', 'puzzle-legend', '藍色：已有方塊　黃色實線：待補缺口'));
+  const views = el('div', 'puzzle-orthographic');
+  views.innerHTML = orthographicSvg(q.missing ?? [], { bounds: q.target ?? [3,3,2], target: true });
+  wrap.append(views);
+  wrap.append(el('div', 'puzzle-legend', '黃色：缺口投影（含遮住的缺口）・側圖為右側・零件可旋轉'));
   return wrap;
 }
 function renderPokerFloor(round) {
-  const wrap = el('div', 'floor-stack poker-public-display'); wrap.append(el('div', 'floor-title', '搭配三張公共牌比較五張牌型'));
+  const gameConfig = state?.gameRules?.games?.memory_poker ?? { communityCards: 4, selectedCardsRequired: 3 };
+  const wrap = el('div', 'floor-stack poker-public-display'); wrap.append(el('div', 'floor-title', `${gameConfig.communityCards} 張公共牌＋${gameConfig.selectedCardsRequired} 張自選牌，取最佳 5 張`));
   const cards = round.question?.community;
   if (cards?.length) {
     const row = el('div', 'card-row');
@@ -1122,7 +1123,7 @@ function render(data) {
   }
   renderFloor(data);
   if (data.phase === 'playing' && data.currentRound) {
-    for (const target of [floor, ...document.querySelectorAll('.question-content')]) target.append(el('div', 'round-timer', roundTimer(data)));
+    for (const target of document.querySelectorAll('.question-content')) target.append(el('div', 'round-timer', roundTimer(data)));
   }
   const overlay = $('#overlay');
   if (data.phase === 'paused' || data.phase === 'resume_countdown') {

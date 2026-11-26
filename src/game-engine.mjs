@@ -1,3 +1,4 @@
+import { orthographicSignature } from '../public/solid-views.mjs';
 import crypto from 'node:crypto';
 import { pokerTiming } from '../public/poker-timing.mjs';
 import { resolvePlayerLayout } from './player-layouts.mjs';
@@ -23,7 +24,7 @@ const CARD_RANKS = '23456789TJQKA';
 const CARD_SUITS = ['♣', '♦', '♥', '♠'];
 const RANDOM_GAME_ID = 'random';
 const RNG_ALGORITHM = 'mulberry32-v1';
-const QUESTION_GENERATOR_VERSION = '1.0.2';
+const QUESTION_GENERATOR_VERSION = '1.0.3';
 // TouchService 704 uses a 2688×3840 canvas. Rotate clockwise, then remove
 // the 512 px blank strip to match the 3328×2688 CAD player-zone profile.
 const TOUCH_CANVAS_HEIGHT = 3840;
@@ -218,13 +219,15 @@ function makeSolidPuzzle(round, config, randomInt) {
   }
   if (!correctShape) throw new Error('無法產生立體拼圖缺口');
   const correctKey = canonicalShape(correctShape);
+  const correctViews = orthographicSignature(correctShape);
   const distractors = new Map();
   const distractorCount = config.optionCount - 1;
   for (let attempt = 0; attempt < 20_000 && distractors.size < distractorCount; attempt++) {
     const shape = randomConnectedShape(volume, target, randomInt);
     if (!shape) continue;
     const key = canonicalShape(shape);
-    if (key !== correctKey && !distractors.has(key)) distractors.set(key, shape);
+    if (key !== correctKey && !distractors.has(key) &&
+        !ROTATIONS_3D.some(rotate => orthographicSignature(shape.map(rotate)) === correctViews)) distractors.set(key, shape);
   }
   if (distractors.size < distractorCount) throw new Error(`無法為 ${volume} 方塊題目產生 ${config.optionCount} 種相異零件`);
   const choices = shuffle([{ cells: correctShape, correct: true }, ...[...distractors.values()].map((cells) => ({ cells, correct: false }))], randomInt)
@@ -363,7 +366,7 @@ function initialPlayerRound(gameId, question, rules, randomInt, sequenceVariantI
     return { values, hearts: rules.games.memory_sequence.heartsPerRound, progress: 0, bestProgress: 0, firstReached: {}, doneAtMs: null, eliminatedAtMs: null, presses: 0, wrongCount: 0 };
   }
   if (gameId === 'slitherlink') {
-    return { edges: Array(edgeCount(question.cols, question.rows)).fill(EDGE_BLANK), doneAtMs: null, moves: 0 };
+    return { edges: Array(edgeCount(question.cols, question.rows)).fill(EDGE_BLANK), doneAtMs: null, moves: 0, history: [] };
   }
   return {};
 }
@@ -458,6 +461,22 @@ function evaluatePoker(cards) {
   if (groups[0][0] === 2 && groups[1][0] === 2) return { category: 2, name: '兩對', key: [2, groups[0][1], groups[1][1], groups[2][1]] };
   if (groups[0][0] === 2) return { category: 1, name: '一對', key: [1, groups[0][1], ...groups.slice(1).map((g) => g[1])] };
   return { category: 0, name: '高牌', key: [0, ...ranks] };
+}
+
+// Evaluate every five-card subset, without requiring any particular public or selected card.
+export function evaluateBestPokerHand(cards) {
+  if (cards.length < 5 || cards.length > 7) throw new Error('牌型評估需要 5 至 7 張牌');
+  let best = null;
+  for (let a = 0; a < cards.length - 4; a++)
+    for (let b = a + 1; b < cards.length - 3; b++)
+      for (let c = b + 1; c < cards.length - 2; c++)
+        for (let d = c + 1; d < cards.length - 1; d++)
+          for (let e = d + 1; e < cards.length; e++) {
+            const selected = [a,b,c,d,e].map(index => cards[index]);
+            const hand = evaluatePoker(selected);
+            if (!best || compareKey(hand.key, best.key) > 0) best = { ...hand, cards: selected };
+          }
+  return best;
 }
 
 function compareKey(a, b) {
@@ -1281,10 +1300,10 @@ export class GameEngine {
       if (!Number.isInteger(index) || index < 0 || index >= 16) return;
       const at = player.selected.indexOf(index);
       if (at >= 0) player.selected.splice(at, 1);
-      else if (player.selected.length < 2) player.selected.push(index);
+      else if (player.selected.length < config.selectedCardsRequired) player.selected.push(index);
       return;
     }
-    if (action.type === 'confirm' && player.selected.length === 2) player.locked = true;
+    if (action.type === 'confirm' && player.selected.length === this.rules.games.memory_poker.selectedCardsRequired) player.locked = true;
   }
 
   sequenceAction(player, action, question, actionAtMs) {
@@ -1311,9 +1330,15 @@ export class GameEngine {
   }
 
   slitherlinkAction(player, action, question, actionAtMs) {
+    if (action.type === 'undo') {
+      const previous = player.history?.pop();
+      if (previous) { player.edges[previous.index] = previous.state; player.moves++; }
+      return;
+    }
     if (action.type !== 'cycle_edge') return;
     const index = Number(action.index);
     if (!Number.isInteger(index) || index < 0 || index >= player.edges.length) return;
+    (player.history ??= []).push({ index, state: player.edges[index] });
     player.edges[index] = nextEdgeState(player.edges[index]);
     player.moves++;
     if (linesMatchSolution(player.edges, question.solution)) player.doneAtMs = actionAtMs;
@@ -1400,6 +1425,9 @@ export class GameEngine {
     }
     if (gameId === 'slitherlink') {
       const config = this.rules.games.slitherlink;
+      if (config.undoRect && inside(config.undoRect)) {
+        this.act(zoneId, { type: 'undo' }, eventElapsedMs); return;
+      }
       const index = slitherlinkEdgeAt(x, y, config.boardRect, config.boardColumns, config.boardRows);
       if (index != null) this.act(zoneId, { type: 'cycle_edge', index }, eventElapsedMs);
       return;
@@ -1754,7 +1782,7 @@ export class GameEngine {
       round.elapsedMs = Math.min(round.limitMs, round.elapsedMs + d);
       const poker = this.rules.games.memory_poker;
       if (round.gameId === 'memory_poker' && round.elapsedMs >= pokerTiming(poker).selectionEnd) {
-        for (const player of Object.values(round.players)) if (player.selected.length === 2) player.locked = true;
+        for (const player of Object.values(round.players)) if (player.selected.length === this.rules.games.memory_poker.selectedCardsRequired) player.locked = true;
       }
       if (round.elapsedMs >= round.limitMs) this.finishRound('deadline');
       else this.changed();
@@ -1815,15 +1843,15 @@ export class GameEngine {
     const entries = round.participantIds.map((id) => ({ id, player: round.players[id] }));
     const gameId = round.gameId;
     for (const { player } of entries) {
-    if (gameId === 'memory_poker' && player.selected.length === 2) {
+      if (gameId === 'memory_poker' && player.selected.length === this.rules.games.memory_poker.selectedCardsRequired) {
         const cards = [...player.selected.map((i) => round.question.cards[i]), ...round.question.community];
-        const evaluated = evaluatePoker(cards);
-        player.hand = { labels: cards.map((c) => c.label), name: evaluated.name };
+        const evaluated = evaluateBestPokerHand(cards);
+        player.hand = { labels: evaluated.cards.map((c) => c.label), name: evaluated.name };
         player.rankKey = evaluated.key;
       }
     }
     const ranked = entries.filter(({ player }) => {
-      if (gameId === 'memory_poker') return player.selected.length === 2;
+      if (gameId === 'memory_poker') return player.selected.length === this.rules.games.memory_poker.selectedCardsRequired;
       if (gameId === 'minesweeper') return player.doneAtMs !== null || player.safeProgress > 0;
       if (gameId === 'memory_sequence') return player.doneAtMs !== null || player.bestProgress > 0;
       return player.doneAtMs !== null;
@@ -1866,7 +1894,7 @@ export class GameEngine {
       elapsedMs: round.elapsedMs, participantCount: n,
       rows: entries.map(({ id, player }) => ({
         zoneId: id, rank: player.rank ?? null, pointsHalf: awards[id],
-        score: awards[id] / unitsPerPoint, completed: gameId === 'memory_poker' ? player.selected.length === 2 : player.doneAtMs !== null,
+        score: awards[id] / unitsPerPoint, completed: gameId === 'memory_poker' ? player.selected.length === this.rules.games.memory_poker.selectedCardsRequired : player.doneAtMs !== null,
         elapsedMs: player.doneAtMs,
         mineHits: player.hits?.length ?? 0,
         sequenceProgress: player.bestProgress ?? null,

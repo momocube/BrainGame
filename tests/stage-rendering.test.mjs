@@ -51,3 +51,18 @@ test('enlarged scoreboards choose enough columns to keep score entries readable'
   assert.equal(scoreboardColumnCount(4), 2);
   assert.equal(scoreboardColumnCount(8), 3);
 });
+
+
+import { orthographicViews, orthographicSignature, orthographicSvg } from '../public/solid-views.mjs';
+test('orthographic views project front, right side and top with correct axes', () => {
+  const cells = [[0,0,0],[1,0,0],[1,0,1],[1,1,1]];
+  const views = orthographicViews(cells);
+  assert.deepEqual(views.map(v => [v.label,v.cols,v.rows]), [['前',2,2],['側',2,2],['上',2,2]]);
+  assert.deepEqual(views[0].cells, [[1,0],[0,1],[1,1]]);
+  assert.deepEqual(views[1].cells, [[0,0],[1,0],[0,1]]);
+  assert.deepEqual(views[2].cells, [[0,0],[1,0],[1,1]]);
+  assert.equal(orthographicSignature(cells), orthographicSignature(cells.map(c => c.map(n => n+4))));
+  const svg = orthographicSvg(cells, { bounds: [3,3,3], target: true });
+  assert.equal((svg.match(/aria-label="[前側上]視圖"/g) ?? []).length, 3);
+  assert.ok(!svg.includes('<polygon'));
+});

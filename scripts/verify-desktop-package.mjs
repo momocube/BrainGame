@@ -15,7 +15,7 @@ const forbidden = entries.filter((entry) => /^\/(?:docs|tests|tmp|data|scripts)(
 if (forbidden.length) throw new Error(`桌面 package 混入非執行資源：${forbidden.slice(0, 5).join(', ')}`);
 for (const required of [
   'src/mouse-input.mjs', 'public/mouse-input.mjs',
-  'public/exit-control.mjs',
+  'public/exit-control.mjs', 'public/solid-views.mjs',
   'public/tutorial-control.mjs', 'public/idle-scene.mjs', 'public/icons/logo-704.png',
   'src/slitherlink.mjs', 'public/slitherlink-board.mjs',
   'src/server.mjs', 'src/game-engine.mjs', 'src/cube-visibility.mjs', 'src/player-layouts.mjs', 'src/player-zone-geometry.mjs',

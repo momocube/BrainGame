@@ -1,7 +1,7 @@
 {
-  "rulesVersion": "1.0.16",
+  "rulesVersion": "1.0.17",
   "status": "prototype_in_progress",
-  "updatedAt": "2026-11-25",
+  "updatedAt": "2026-11-26",
   "common": {
     "sessionDurationSeconds": 2700,
     "countdownSeconds": 3,
@@ -313,9 +313,9 @@
       "memorySeconds": 20,
       "selectionSeconds": 10,
       "revealCountdownSeconds": 3,
-      "communityCards": 3,
+      "communityCards": 4,
       "communityCardsVisibleDuringMemory": true,
-      "selectedCardsRequired": 2,
+      "selectedCardsRequired": 3,
       "uniqueCardsAcrossMemoryAndCommunity": true,
       "cardGridRect": {
         "x": 0,
@@ -513,7 +513,13 @@
           "regionCellsMax": 16,
           "deductionTrialDepth": 1
         }
-      ]
+      ],
+      "undoRect": {
+        "x": 448,
+        "y": 128,
+        "width": 192,
+        "height": 64
+      }
     }
   }
 }

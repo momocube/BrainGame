@@ -411,3 +411,20 @@
 .player-game-header .zone-detail{font-size:14px;line-height:22px;height:22px;min-height:0;max-width:100%}
 .player-countdown-header{align-items:center;justify-content:center}
 .game-countdown{color:#ff626b}
+
+/* Keep the 128px status band and all answer hit targets unchanged. */
+.player-game-title{display:flex;justify-content:center;align-items:center;gap:24px}
+.player-round-progress{font-size:34px;color:#ffdc67;font-variant-numeric:tabular-nums}
+.sequence-hearts{display:flex;gap:6px;margin-left:18px;font-size:52px;line-height:52px}
+.sequence-hearts .heart-full{color:#ff7185}.sequence-hearts .heart-empty{color:#8393a9}
+.sequence-game-header .player-game-clock{height:52px}
+.sequence-game-header{grid-template-rows:44px 52px 20px}
+.sequence-game-header .player-game-title{line-height:44px}
+.slither-body{position:relative}
+.slither-undo{position:absolute;display:grid;place-items:center;background:#184c5b;border:3px solid #70dcca;color:#efffff;font-size:30px;font-weight:900}
+.slither-undo.disabled{background:#26384f;border-color:#647994;color:#9aaec8}
+.orthographic-piece{width:100%;height:auto;flex:1;min-height:0}
+.orthographic-piece svg,.puzzle-orthographic svg,.tutorial-orthographic svg{display:block;width:100%;height:100%}
+.puzzle-orthographic{width:100%;flex:1;min-height:0}
+.tutorial-orthographic{width:100%;height:310px}
+.poker-public-display .public-card,.question-content .poker-public-display .public-card,.round-result-question .poker-public-display .public-card{max-width:22%;flex-basis:22%}
