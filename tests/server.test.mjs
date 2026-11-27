@@ -228,7 +228,7 @@ test('HTTP service starts a session, handles random selection, and reports stage
       body: JSON.stringify({ action: 'start-session' })
     });
     assert.equal(blockedStartResponse.status, 400);
-    assert.match((await blockedStartResponse.json()).error, /TouchService 尚未就緒/);
+    assert.match((await blockedStartResponse.json()).error, /遊戲畫面尚未完成繪製/);
     assert.equal((await fetch(`${baseUrl}/api/state`).then((response) => response.json())).phase, 'idle',
       'a rejected start leaves the engine in standby');
     touchClient.send(JSON.stringify({ type: 'locks', lockedCells: [], autoLockActive: false, autoLockRemainingSeconds: 0 }));
@@ -296,7 +296,7 @@ test('HTTP service starts a session, handles random selection, and reports stage
     assert.equal(Object.hasOwn(diagnostics, 'currentRound'), false, 'diagnostics never expose game state');
 
     touchClient.send(JSON.stringify(touchFrame(1, [
-      { id: 1, phase: 'down', face: 0, px: [320, 2_624] }
+      { id: 1, phase: 'down', face: 0, px: [320, 1_664] }
     ], [1])));
     const mappedTouch = await waitUntil(
       async () => fetch(`${baseUrl}/api/state?view=diagnostics`).then((response) => response.json()),
@@ -304,7 +304,7 @@ test('HTTP service starts a session, handles random selection, and reports stage
       'the live diagnostic touch frame'
     );
     assert.equal(mappedTouch.active[0].position.zoneId, 'P1');
-    assert.deepEqual(mappedTouch.active[0].cadPoint, { x: 704, y: 320 });
+    assert.deepEqual(mappedTouch.active[0].cadPoint, { x: 1664, y: 320 });
 
     touchClient.send(JSON.stringify(touchFrame(2, [
       { id: 2, phase: 'down', face: 5, px: [2_100, 2_100] }
@@ -329,7 +329,7 @@ test('HTTP service starts a session, handles random selection, and reports stage
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'start-session' })
     });
     assert.equal(disabledStart.status, 400);
-    assert.match((await disabledStart.json()).error, /互動總開關已停用/);
+    assert.match((await disabledStart.json()).error, /遊戲畫面尚未完成繪製/);
     touchService.setConfigAvailable(false);
     const unverifiedTouch = await waitUntil(
       async () => fetch(`${baseUrl}/api/state?view=diagnostics`).then((response) => response.json()),
@@ -359,13 +359,13 @@ test('HTTP service starts a session, handles random selection, and reports stage
     assert.match(staffJavaScript, /export-session-json/);
     assert.match(staffJavaScript, /openTouchDiagnostics/);
     assert.match(staffJavaScript, /runQuestionPreflight/);
-    assert.match(staffJavaScript, /startSession\.disabled = data\.phase !== 'idle' \|\| !touch\.ready \|\| !stageReady/);
+    assert.match(staffJavaScript, /startSession\.disabled = data\.phase !== 'idle' \|\| !stageReady/);
     assert.match(staffJavaScript, /stageReadyConnections/);
     assert.match(staffJavaScript, /pauseInfo\.reason/);
     assert.match(staffJavaScript, /【系統異常】/);
     assert.match(staffJavaScript, /觸發來源：/);
     assert.match(staffJavaScript, /暫停與恢復由工作人員控制/);
-    assert.match(staffJavaScript, /TouchService 未就緒，暫時不能開始場次/);
+    assert.match(staffJavaScript, /可直接用滑鼠點擊第二螢幕/);
     const stageScript = await fetch(`${baseUrl}/stage.js`).then((response) => response.text());
     assert.match(stageScript, /api\/stage-ready/);
     assert.match(stageScript, /api\/state\?view=stage/);
@@ -455,9 +455,10 @@ test('HTTP service starts a session, handles random selection, and reports stage
     const startWithUnverifiableInteraction = await fetch(`${baseUrl}/api/control`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'start-session' })
     });
-    assert.equal(startWithUnverifiableInteraction.status, 400);
-    assert.match((await startWithUnverifiableInteraction.json()).error, /無法確認互動總開關/);
-    assert.equal((await fetch(`${baseUrl}/api/state`).then((response) => response.json())).phase, 'idle');
+    assert.equal(startWithUnverifiableInteraction.status, 200, 'normal mouse play can start without physical interaction');
+    assert.equal((await startWithUnverifiableInteraction.json()).state.phase, 'lobby');
+    await postControl({ action: 'end-session' });
+    await postControl({ action: 'return-to-standby' });
     touchService.setConfigAvailable(true);
     await waitUntil(
       async () => fetch(`${baseUrl}/api/state?view=diagnostics`).then((response) => response.json()),
@@ -472,13 +473,12 @@ test('HTTP service starts a session, handles random selection, and reports stage
     });
     assert.equal(activePreflightResponse.status, 400);
     assert.match((await activePreflightResponse.json()).error, /場次進行中不可執行題目檢查/);
-    await postControl({ action: 'join-zone', zoneId: 'P1' });
     await postControl({ action: 'select-game', gameId: 'zero_sum_grid' });
     const sessionsResponse = await fetch(`${baseUrl}/api/sessions`);
     assert.equal(sessionsResponse.status, 200);
     const sessions = (await sessionsResponse.json()).sessions;
-    assert.equal(sessions.length, 1);
-    assert.equal(sessions[0].participantCount, 1);
+    assert.equal(sessions.length, 2, 'includes the earlier mouse session with unavailable physical touch');
+    assert.equal(sessions[0].participantCount, 4);
 
     staffAbort = new AbortController();
     const staffEvents = await fetch(`${baseUrl}/api/events`, { signal: staffAbort.signal });
@@ -546,8 +546,8 @@ test('HTTP service starts a session, handles random selection, and reports stage
     const resumeBeforeTouchRecovery = await fetch(`${baseUrl}/api/control`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'resume' })
     });
-    assert.equal(resumeBeforeTouchRecovery.status, 400, 'staff cannot resume before TouchService is ready');
-    assert.equal((await resumeBeforeTouchRecovery.json()).error.includes('TouchService'), true);
+    assert.equal(resumeBeforeTouchRecovery.status, 200, 'staff can explicitly resume with normal mouse input');
+    await postControl({ action: 'pause' });
     touchService.setInteractionEnabled(true);
     const interactionRestoredWhilePaused = await waitUntil(
       async () => fetch(`${baseUrl}/api/state`).then((response) => response.json()),
@@ -556,7 +556,7 @@ test('HTTP service starts a session, handles random selection, and reports stage
     );
     assert.equal(interactionRestoredWhilePaused.phase, 'paused', 'restored interaction requires staff to resume');
     assert.equal(interactionRestoredWhilePaused.resumeTarget, 'lobby');
-    assert.equal(interactionRestoredWhilePaused.pauseInfo?.source, 'touch-service', 'the pause origin remains visible until staff resume');
+    assert.equal(interactionRestoredWhilePaused.pauseInfo?.source, 'staff', 'the latest explicit staff pause remains visible');
     await postControl({ action: 'resume' });
     await waitUntil(
       async () => fetch(`${baseUrl}/api/state`).then((response) => response.json()),
@@ -573,7 +573,7 @@ test('HTTP service starts a session, handles random selection, and reports stage
       totalHalfPoints: stateBeforeTouchDisconnect.participants[id].totalHalfPoints,
       roundsPlayed: stateBeforeTouchDisconnect.participants[id].roundsPlayed
     }]));
-    assert.deepEqual(participantIdsBeforeTouchDisconnect, ['P1', 'P2']);
+    assert.deepEqual(participantIdsBeforeTouchDisconnect, ['P1', 'P2', 'P3', 'P4', 'P5']);
     if (reconnectTouchHeartbeat) clearInterval(reconnectTouchHeartbeat);
     reconnectTouchHeartbeat = null;
     const disconnectedTouchClient = touchClient;
@@ -762,188 +762,46 @@ test('HTTP service starts a session, handles random selection, and reports stage
   }
 });
 
-test('a server process restart resumes from the last settled round and retries the interrupted round', async () => {
-  const port = await freePort();
-  const baseUrl = `http://127.0.0.1:${port}`;
-  const touchService = await startMockTouchService();
-  touchService.on('connection', (socket) => socket.send(JSON.stringify(touchHello())));
-  let touchSequence = 0;
-  const heartbeat = setInterval(() => {
-    const frame = JSON.stringify(touchFrame(++touchSequence, [], []));
-    for (const client of touchService.clients) if (client.readyState === 1) client.send(frame);
-  }, 500);
-  heartbeat.unref();
-  const dataDir = fs.mkdtempSync(path.join(ROOT, 'tmp', 'server-recovery-test-'));
-  let running = startServerProcess({ port, dataDir, touchPort: touchService.address().port });
-  let child = running.child;
-
-  const postControl = async (body) => {
-    const response = await fetch(`${baseUrl}/api/control`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body)
-    });
-    const value = await response.json();
-    assert.equal(response.status, 200, value.error ?? `control request failed: ${body.action}`);
-    return value.state;
-  };
-  const stageStreams = [];
-  const connectStage = async () => {
-    const abort = new AbortController();
-    const response = await fetch(`${baseUrl}/api/events?view=stage`, { signal: abort.signal });
-    assert.match(response.headers.get('content-type'), /text\/event-stream/);
-    const reader = response.body.getReader();
-    const clientId = await readStageClientId(reader);
-    await acknowledgeStagePaint(baseUrl, clientId);
-    const renderHeartbeat = setInterval(() => { acknowledgeStagePaint(baseUrl, clientId).catch(() => {}); }, 500);
-    renderHeartbeat.unref();
-    stageStreams.push({ abort, reader, renderHeartbeat });
-    return waitUntil(
-      async () => fetch(`${baseUrl}/api/state`).then((stateResponse) => stateResponse.json()),
-      (value) => value.output.stageConnections === 1 && value.output.stageReady,
-      'the stage screen to render for the recovery test'
-    );
-  };
-
-  try {
-    await waitForHealth(baseUrl, child, running.output);
-    await waitUntil(
-      async () => fetch(`${baseUrl}/health`).then((response) => response.json()),
-      (value) => value.touch,
-      'TouchService readiness before starting the recovery test'
-    );
-    await connectStage();
-    await postControl({ action: 'start-session' });
-    await postControl({ action: 'join-zone', zoneId: 'P1' });
-    await postControl({ action: 'select-game', gameId: 'zero_sum_grid' });
-    await postControl({ action: 'confirm-game-selection' });
-    const beforeCrash = await postControl({ action: 'start-after-tutorial' });
-    assert.equal(beforeCrash.phase, 'countdown');
-    assert.equal(beforeCrash.currentRound.round, 1);
-    const sessionId = beforeCrash.sessionId;
-
-    const playingFirstRound = await waitUntil(
-      async () => fetch(`${baseUrl}/api/state`).then((response) => response.json()),
-      (value) => value.phase === 'playing',
-      'the first round to start',
-      100
-    );
-    const answer = String(playingFirstRound.currentRound.question.answers.length);
-    let contactId = 100;
-    const sendTouch = (id, phase, u, v, alive) => {
-      const cadX = 704 + u * 640;
-      const cadY = v * 640;
-      const event = { id, phase, face: 0, px: [cadY, 3_328 - cadX] };
-      const frame = touchFrame(++touchSequence, [event], alive);
-      for (const client of touchService.clients) if (client.readyState === 1) client.send(JSON.stringify(frame));
-    };
-    const tapKey = async (key) => {
-      const keys = ['1', '2', '3', 'confirm', '4', '5', '6', 'backspace', '7', '8', '9', 'spacer', 'spacer', '0', 'spacer', 'clear'];
-      const index = keys.indexOf(key);
-      assert.notEqual(index, -1, `the keypad contains ${key}`);
-      const column = index % 4, row = Math.floor(index / 4), id = contactId++;
-      const u = ((column + 0.5) * 160) / 640;
-      const v = (272 + (row + 0.5) * 92) / 640;
-      sendTouch(id, 'down', u, v, [id]);
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      sendTouch(id, 'up', u, v, []);
-      await new Promise((resolve) => setTimeout(resolve, 30));
-    };
-    for (const digit of answer) await tapKey(digit);
-    await tapKey('confirm');
-    const settledRound = await waitUntil(
-      async () => fetch(`${baseUrl}/api/state`).then((response) => response.json()),
-      (value) => value.phase === 'round_results',
-      'the first round to settle after real TouchService frames'
-    );
-    assert.equal(settledRound.results.length, 1);
-    assert.equal(settledRound.results[0].round, 1);
-    assert.equal(settledRound.results[0].rows[0].completed, true);
-    const completedScore = settledRound.participants.P1.totalHalfPoints;
-
-    const interruptedState = await waitUntil(
-      async () => fetch(`${baseUrl}/api/state`).then((response) => response.json()),
-      (value) => value.phase === 'countdown' && value.currentRound?.round === 2,
-      'the next round to begin before the simulated crash',
-      140
-    );
-    const interruptedQuestionId = interruptedState.currentRound.questionId;
-    const savedStateFile = path.join(dataDir, 'session-state.json');
-    assert.equal(JSON.parse(fs.readFileSync(savedStateFile, 'utf8')).currentRound.questionId, interruptedQuestionId);
-
-    const crashedProcess = child;
-    await new Promise((resolve) => {
-      crashedProcess.once('exit', resolve);
-      crashedProcess.kill('SIGKILL');
-    });
-    for (const stream of stageStreams) {
-      clearInterval(stream.renderHeartbeat);
-      stream.abort.abort();
+test('every server launch enters standby and archives previous settled scores', async () => {
+  const { GameEngine } = await import('../src/game-engine.mjs');
+  const rules = JSON.parse(fs.readFileSync(path.join(ROOT, 'config/game-rules.v1.json'), 'utf8'));
+  const zones = { ...JSON.parse(fs.readFileSync(path.join(ROOT, 'config/player-zones.704.json'), 'utf8')),
+    profilePlan: JSON.parse(fs.readFileSync(path.join(ROOT, 'config/player-layouts.704.json'), 'utf8')) };
+  const engine = new GameEngine({ rules, zones });
+  engine.startSession({ initialPlayerCount: 0 }); engine.join('P1');
+  engine.selectGame('cube_count'); engine.confirmGameSelection(); engine.startAfterTutorial();
+  for(let i=0;i<3;i++) engine.tick(1000);
+  for(const key of String(engine.state.currentRound.question.total)) engine.act('P1', {key});
+  engine.act('P1', {key:'confirm'});
+  assert.equal(engine.state.phase, 'round_results');
+  const settled = structuredClone(engine.state);
+  for(const phase of ['lobby','playing','paused','resume_countdown','round_results','final_results','idle']) {
+    const dataDir=fs.mkdtempSync(path.join(ROOT,'tmp','startup-standby-'));
+    const prior={...structuredClone(settled),phase};
+    if(phase==='idle') prior.sessionId=null;
+    fs.writeFileSync(path.join(dataDir,'session-state.json'),JSON.stringify(prior));
+    const port=await freePort(),touchPort=await freePort(),baseUrl='http://127.0.0.1:'+port;
+    const running=startServerProcess({port,dataDir,touchPort});
+    try {
+      const health=await waitForHealth(baseUrl,running.child,running.output);
+      assert.equal(health.phase,'idle',phase);
+      const fresh=await fetch(baseUrl+'/api/state').then(r=>r.json());
+      assert.equal(fresh.sessionId,null); assert.equal(fresh.currentRound,null);
+      assert.equal(fresh.pauseInfo,null); assert.deepEqual(fresh.participantIds,[]);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(dataDir,'session-state.json'),'utf8')).phase,'idle');
+      if(prior.sessionId) {
+        const archive=await fetch(baseUrl+'/api/sessions/'+prior.sessionId+'.json').then(r=>r.json());
+        assert.equal(archive.phase,'final_results');
+        assert.deepEqual(archive.results,settled.results);
+        assert.equal(archive.participants[0].totalHalfPoints,settled.participants.P1.totalHalfPoints);
+      }
+    } finally {
+      if(running.child.exitCode===null) { const exited=new Promise(r=>running.child.once('exit',r));running.child.kill();await exited; }
     }
-
-    running = startServerProcess({ port, dataDir, touchPort: touchService.address().port });
-    child = running.child;
-    const health = await waitForHealth(baseUrl, child, running.output);
-    assert.equal(health.phase, 'paused', 'a recovered game waits for staff confirmation before accepting touch input');
-    await waitUntil(
-      async () => fetch(`${baseUrl}/health`).then((response) => response.json()),
-      (value) => value.touch,
-      'TouchService readiness after restarting the game server'
-    );
-    await connectStage();
-
-    const recovered = await fetch(`${baseUrl}/api/state`).then((response) => response.json());
-    assert.equal(recovered.sessionId, sessionId);
-    assert.equal(recovered.phase, 'paused');
-    assert.equal(recovered.resumeTarget, 'tutorial');
-    assert.equal(recovered.selectedGame, 'zero_sum_grid');
-    assert.equal(recovered.gameRoundIndex, 1);
-    assert.equal(recovered.currentRound, null);
-    assert.deepEqual(recovered.participantIds, ['P1']);
-    assert.equal(recovered.participants.P1.totalHalfPoints, completedScore);
-    assert.equal(recovered.participants.P1.roundsPlayed, 1);
-    const archive = await fetch(`${baseUrl}/api/sessions/${sessionId}.json`).then((response) => response.json());
-    assert.equal(archive.phase, 'paused');
-    assert.equal(archive.results.length, 1, 'the completed first round remains archived');
-    assert.equal(archive.results[0].round, 1);
-
-    await postControl({ action: 'resume' });
-    const tutorial = await waitUntil(
-      async () => fetch(`${baseUrl}/api/state`).then((response) => response.json()),
-      (value) => value.phase === 'tutorial',
-      'staff resume to restore the round tutorial',
-      100
-    );
-    assert.equal(tutorial.selectedGame, 'zero_sum_grid');
-    assert.equal(tutorial.currentRound, null);
-
-    await postControl({ action: 'start-after-tutorial' });
-    const playing = await waitUntil(
-      async () => fetch(`${baseUrl}/api/state`).then((response) => response.json()),
-      (value) => value.phase === 'playing',
-      'the interrupted round to restart after the tutorial',
-      100
-    );
-    assert.equal(playing.currentRound.round, 2);
-    assert.notEqual(playing.currentRound.questionId, interruptedQuestionId);
-  } finally {
-    clearInterval(heartbeat);
-    for (const stream of stageStreams) {
-      clearInterval(stream.renderHeartbeat);
-      try { await stream.reader.cancel(); } catch { /* The server process may already have exited. */ }
-      stream.abort.abort();
-    }
-    if (child.exitCode === null) {
-      const exited = new Promise((resolve) => child.once('exit', resolve));
-      child.kill('SIGTERM');
-      await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 2_000))]);
-      if (child.exitCode === null) child.kill('SIGKILL');
-    }
-    for (const client of touchService.clients) client.terminate();
-    await new Promise((resolve) => touchService.close(resolve));
-    fs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
 
-test('mouse mode works without TouchService and the lobby API preserves persisted scores', async () => {
+test('normal stage mouse input works without TouchService and the lobby API preserves persisted scores', async () => {
   const port = await freePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   const dataDir = fs.mkdtempSync(path.join(ROOT, 'tmp', 'mouse-server-test-'));
@@ -966,22 +824,19 @@ test('mouse mode works without TouchService and the lobby API preserves persiste
     const clientId = await readStageClientId(reader);
     await acknowledgeStagePaint(baseUrl, clientId);
     heartbeat = setInterval(() => acknowledgeStagePaint(baseUrl, clientId).catch(() => {}), 500);
-    const disabled = await post('/api/mouse-input', { clientId, phase: 'down', px: [1000, 1000] });
-    assert.equal(disabled.status, 400);
-    await control('set-mouse-test', { enabled: true });
+    const direct = await post('/api/mouse-input', { clientId, phase: 'down', px: [1000, 1000] });
+    assert.equal(direct.status, 200);
     const started = await control('start-session');
-    assert.equal(started.input.ready, true);
-    assert.equal(started.input.mouseTest, true);
-    assert.equal((await post('/api/control', { action: 'set-mouse-test', enabled: false })).status, 400);
-    await control('join-zone', { zoneId: 'P1' });
-    await control('join-zone', { zoneId: 'P2' });
+    assert.equal(started.input.ready, false, 'physical TouchService is offline');
+    assert.equal(started.input.mouseAvailable, true);
+    assert.deepEqual(started.participantIds, ['P1','P2','P3','P4']);
     await control('select-game', { gameId: 'cube_count' });
     await control('confirm-game-selection');
     await control('start-after-tutorial');
     const state = await waitUntil(() => fetch(`${baseUrl}/api/state`).then((r) => r.json()),
       (s) => s.phase === 'playing', 'mouse-only countdown', 120);
     const rules = JSON.parse(fs.readFileSync(path.join(ROOT, 'config/game-rules.v1.json'), 'utf8'));
-    const zone = state.zones.find((z) => z.id === 'P1');
+    for (const zone of state.zones.filter(z => ['P1','P2','P3'].includes(z.id))) {
     const rect = rules.common.layout.numericKeypadRect;
     const layout = rules.common.layout;
     for (const key of [...String(state.currentRound.question.total), 'confirm']) {
@@ -997,9 +852,10 @@ test('mouse mode works without TouchService and the lobby API preserves persiste
         assert.equal(result.status, 200, result.error);
       }
     }
+    }
     const scored = await fetch(`${baseUrl}/api/state`).then((r) => r.json());
     assert.equal(scored.phase, 'round_results');
-    assert.equal(scored.finalRankings[0].score, 1);
+    assert.ok(scored.finalRankings[0].score > 0);
     const lobby = await control('return-to-lobby');
     assert.equal(lobby.phase, 'lobby');
     assert.equal(lobby.sessionId, started.sessionId);
@@ -1007,13 +863,13 @@ test('mouse mode works without TouchService and the lobby API preserves persiste
     assert.deepEqual(lobby.results, scored.results);
     const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'session-state.json'), 'utf8'));
     assert.equal(saved.phase, 'lobby');
-    assert.equal(saved.participants.P1.totalHalfPoints, 2);
+    assert.equal(saved.participants.P1.totalHalfPoints, scored.participants.P1.totalHalfPoints);
     assert.deepEqual(saved.results, scored.results);
     assert.equal((await post('/api/mouse-input', { clientId: 'unknown', phase: 'down', px: [1, 1] })).status, 400);
     await control('end-session');
-    const disabledState = await control('set-mouse-test', { enabled: false });
-    assert.equal(disabledState.input.mouseTest, false);
-    assert.equal(disabledState.input.ready, false);
+    const standby = await control('return-to-standby');
+    assert.equal(standby.input.mouseAvailable, true);
+    assert.equal(standby.input.ready, false);
   } finally {
     clearInterval(heartbeat);
     if (reader) await reader.cancel().catch(() => {});

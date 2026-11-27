@@ -20,7 +20,7 @@ const venue = JSON.parse(fs.readFileSync(path.join(ROOT, 'config/venue-704.json'
 
 function startReadySession(engine) {
   engine.setInputStatus(true, '測試 TouchService 已就緒');
-  engine.startSession();
+  engine.startSession({ initialPlayerCount: 0 });
 }
 
 function createEngine(gameId, { participants = ['P1'], round = 1, seed } = {}) {
@@ -45,15 +45,20 @@ function advance(engine, milliseconds) {
   }
 }
 
-test('a session cannot start until TouchService reports ready', () => {
+test('normal game sessions support mouse input without TouchService or a mode switch', () => {
   const engine = new GameEngine({ rules, zones, onSave() {} });
-  assert.equal(engine.snapshot().input.ready, false);
-  assert.throws(() => engine.startSession(), /TouchService 尚未就緒.*等待 TouchService/);
-  assert.equal(engine.state.phase, 'idle');
-
-  engine.setInputStatus(true, 'TouchService v1 / venue 704');
+  assert.equal(engine.snapshot().input.ready, false, 'physical touch status stays truthful');
+  assert.equal(engine.snapshot().input.mouseAvailable, true);
   engine.startSession();
   assert.equal(engine.state.phase, 'lobby');
+  assert.deepEqual(engine.state.participantIds, ['P1', 'P2', 'P3', 'P4']);
+  assert.equal(engine.joinFromZone('P1'), 'P5');
+  assert.deepEqual(engine.state.participantIds, ['P1', 'P2', 'P3', 'P4', 'P5']);
+  engine.setInputStatus(false, 'TouchService 正在重新連線');
+  assert.equal(engine.state.phase, 'lobby', 'offline retries do not interrupt mouse play');
+  engine.setInputStatus(true, 'TouchService v1 / venue 704');
+  engine.setInputStatus(false, 'TouchService disconnected');
+  assert.equal(engine.state.phase, 'paused', 'loss of an active physical input still pauses');
 });
 
 function submitNumber(engine, zoneId, value) {
@@ -1460,13 +1465,13 @@ test('TouchService down events submit one tap immediately and up only releases i
   const col = question.anchor % question.cols, row = Math.floor(question.anchor / question.cols);
   const u = (board.x + (col + 0.5) * board.width / question.cols) / 640;
   const v = (board.y + (row + 0.5) * board.height / question.rows) / 640;
-  const down = p1TouchEvent(41, 'down', u, v);
+  const down = p1TouchEvent(41, 'down', u, v, 'P1', engine);
   engine.handleTouchFrame(touchFrame([down], [41]));
   const player = engine.state.currentRound.players.P1;
   const revealedAfterDown = [...player.revealed];
   assert.ok(revealedAfterDown.includes(question.anchor));
 
-  engine.handleTouchFrame(touchFrame([p1TouchEvent(41, 'up', u, v)], []));
+  engine.handleTouchFrame(touchFrame([p1TouchEvent(41, 'up', u, v, 'P1', engine)], []));
   assert.deepEqual(player.revealed, revealedAfterDown);
 });
 
@@ -1511,9 +1516,9 @@ test('players cannot join by touching a wall, and tutorial holds are limited to 
   ready.join('P1');
   ready.selectGame('minesweeper');
   ready.confirmGameSelection();
-  ready.handleTouchFrame(touchFrame([p1TouchEvent(53, 'down', 0.5, 0.7)], [53]));
+  ready.handleTouchFrame(touchFrame([p1TouchEvent(53, 'down', 0.5, 0.7, 'P1', ready)], [53]));
   ready.contacts.get('53').started -= rules.common.readyHoldSeconds * 1_000 + 200;
-  ready.handleTouchFrame(touchFrame([p1TouchEvent(53, 'up', 0.5, 0.9)], []));
+  ready.handleTouchFrame(touchFrame([p1TouchEvent(53, 'up', 0.5, 0.9, 'P1', ready)], []));
   assert.equal(ready.state.participants.P1.ready, false, 'releasing outside the ready control cannot ready the player');
   assert.equal(ready.state.phase, 'tutorial');
 
@@ -1566,7 +1571,7 @@ test('staff joins a player, who can choose, prepare, start and answer through To
   const question = engine.state.currentRound.question;
   const u = (board.x + (question.anchor % question.cols + 0.5) * board.width / question.cols) / 640;
   const v = (board.y + (Math.floor(question.anchor / question.cols) + 0.5) * board.height / question.rows) / 640;
-  engine.handleTouchFrame(touchFrame([p1TouchEvent(85, 'down', u, v)], [85]));
+  engine.handleTouchFrame(touchFrame([p1TouchEvent(85, 'down', u, v, 'P1', engine)], [85]));
   assert.ok(engine.state.currentRound.players.P1.revealed.includes(question.anchor));
 });
 
@@ -1615,6 +1620,9 @@ test('lobby offers random selection and rejects conflicting choices from the sam
   const selectedWall = shared.menuZones[shared.gameOrder.indexOf(shared.state.selectedGame)];
   assert.equal(shared.gamePreviewActionAt(selectedWall.id, 0.25, 0.6), 'confirm');
   assert.equal(shared.gamePreviewActionAt(selectedWall.id, 0.75, 0.6), 'cancel');
+  assert.equal(shared.gamePreviewActionAt(selectedWall.id, 0.40, 0.6), 'confirm', 'the enlarged confirm edge is interactive');
+  assert.equal(shared.gamePreviewActionAt(selectedWall.id, 0.60, 0.6), 'cancel', 'the enlarged cancel edge is interactive');
+  assert.equal(shared.gamePreviewActionAt(selectedWall.id, 0.40, 0.75), null, 'outside the enlarged circle stays inactive');
   assert.equal(shared.gamePreviewActionAt(shared.menuZones[1].id, 0.25, 0.6), null,
     'preview controls appear only on the selected game wall');
   assert.equal(shared.gamePreviewActionAt(selectedWall.id, 0.5, 0.6), null,
@@ -1696,8 +1704,8 @@ test('two controls touched in one player zone batch are rejected together', () =
   const otherU = (board.x + 0.5 * board.width / question.cols) / 640;
   const otherV = (board.y + 0.5 * board.height / question.rows) / 640;
   engine.handleTouchFrame(touchFrame([
-    p1TouchEvent(61, 'down', anchorU, anchorV),
-    p1TouchEvent(62, 'down', otherU, otherV)
+    p1TouchEvent(61, 'down', anchorU, anchorV, 'P1', engine),
+    p1TouchEvent(62, 'down', otherU, otherV, 'P1', engine)
   ], [61, 62]));
 
   assert.deepEqual(engine.state.currentRound.players.P1.revealed, []);
@@ -1768,15 +1776,13 @@ test('return to lobby rejects inactive and expired sessions without changing sco
   assert.throws(() => engine.returnToLobby(), /進行中的場次/);
 });
 
-test('mouse testing selects any shared wall and handles real-duration holds and cancelled drags', () => {
+test('normal stage mouse input selects any shared wall and handles real-duration holds and cancelled drags', () => {
   let now = 0;
   const engine = new GameEngine({ rules, zones, clock: () => now, onSave() {} });
   startReadySession(engine);
   engine.join('P1');
   const mouse = (event, revision = engine.phaseRevision) => handleMouseInput(engine, { ...event, phaseRevision: revision }, 'test');
   const choice = menuTouchEvent(1, 'down', 0.5, 0.6, 'P3', engine);
-  assert.throws(() => mouse(choice), /開啟滑鼠測試/);
-  engine.mouseTestEnabled = true;
   mouse(choice);
   assert.equal(engine.state.selectedGame, engine.gameOrder[2], 'unoccupied walls remain usable in the shared menu');
   mouse(menuTouchEvent(1, 'down', 0.25, 0.6, 'P3', engine));
@@ -1800,9 +1806,8 @@ test('mouse testing selects any shared wall and handles real-duration holds and 
 });
 
 test('mouse input hits numeric keys across player layouts and ignores stale phases', () => {
-  for (const count of [1, 4, 8]) {
+  for (const count of [1, 4, 5, 6, 7, 8]) {
     const engine = createEngine('cube_count', { participants: Array.from({ length: count }, (_, i) => `P${i + 1}`) });
-    engine.mouseTestEnabled = true;
     const layout = rules.common.layout, rect = layout.numericKeypadRect;
     for (const zoneId of engine.state.participantIds) {
       const index = layout.numericKeypadKeys.indexOf('7');
@@ -1855,7 +1860,6 @@ test('tutorial circle reports hold duration and cancels on leaving the circle, r
   assert.equal(engine.state.phase, 'tutorial', 'moving back into the circle cannot restore a cancelled hold');
   send('down', 0.5, 0.85); now += 2000; send('up', 0.5, 0.85);
   assert.equal(engine.state.phase, 'tutorial', 'the previous rectangular button is no longer interactive');
-  engine.mouseTestEnabled = true;
   const mouse = (phase) => handleMouseInput(engine, { ...floorTouchEvent(1, phase, 0.5, 0.5), phaseRevision: engine.phaseRevision }, 'progress-test');
   mouse('down'); now += 500;
   assert.equal(engine.snapshot().tutorialHold.heldMs, 500, 'mouse progress has no physical sensor release delay');
@@ -1952,7 +1956,6 @@ for (const phase of ['game_preview','tutorial','countdown','playing','round_resu
 
 test('mouse uses the same fixed exit strip and tap confirmation as TouchService', () => {
   const engine = createEngine('cube_count');
-  engine.mouseTestEnabled = true;
   let now = 0; engine.clock = () => now; engine.lastTick = now;
   const send = (phase, action, revision = engine.phaseRevision) =>
     handleMouseInput(engine, { ...exitTouchEvent(1, phase, action), phaseRevision: revision }, 'exit-test');
@@ -2121,6 +2124,11 @@ test('slitherlink undo restores consecutive states, stays private, and resets ea
   assert.equal(Object.hasOwn(view(), 'history'), false);
   assert.equal(engine.currentPlayer('P2').history.length, 0);
   const r = rules.games.slitherlink.undoRect;
+  assert.equal(r.width, r.height, 'undo button is circular');
+  assert.ok(r.x > rules.games.slitherlink.boardRect.x + rules.games.slitherlink.boardRect.width);
+  assert.equal(r.y + r.height / 2, rules.games.slitherlink.boardRect.y + rules.games.slitherlink.boardRect.height / 2);
+  engine.coordinateAction('P1', (r.x + 1) / 640, (r.y + 1) / 640);
+  assert.deepEqual(player.edges.slice(0,2), [2,1], 'outside the circular button does not undo');
   engine.coordinateAction('P1', (r.x+r.width/2)/640, (r.y+r.height/2)/640);
   assert.deepEqual(player.edges.slice(0,2), [2,0]);
   engine.act('P1', { type: 'undo' });
@@ -2156,5 +2164,55 @@ test('new solid puzzles avoid distractors with identical orthographic views', as
     const q = engine.state.currentRound.question;
     const target = orthographicSignature(q.missing);
     assert.equal(q.choices.filter(c => orthographicSignature(c.cells) === target).length, 1);
+  }
+});
+
+
+test('mouse and physical contacts coexist without cancelling each other or other stage clients', () => {
+  let now = 0;
+  const engine = new GameEngine({ rules, zones, clock: () => now, onSave() {} });
+  startReadySession(engine); engine.join('P1'); engine.selectGame('cube_count'); engine.confirmGameSelection();
+  engine.touchReleaseTimeoutMs = 170;
+  const floor = floorTouchEvent(42, 'down', 0.5, 0.5);
+  const frame = (events, alive) => engine.handleTouchFrame({v:1,venue:'704',events,alive});
+  const mouse = (phase, client='a') => handleMouseInput(engine, {...floor,phase,phaseRevision:engine.phaseRevision},client);
+  frame([floor],[42]);
+  mouse('down'); mouse('down','b');
+  assert.equal(engine.contacts.size,3);
+  assert.equal(engine.contacts.get('42').releaseDelayMs,170);
+  assert.equal(engine.contacts.get('mouse:a').releaseDelayMs,0);
+  frame([], [42]);
+  assert.equal(engine.contacts.size,3, 'physical heartbeats keep mouse holds');
+  mouse('up','b');
+  assert.equal(engine.contacts.size,2, 'one mouse release preserves the other mouse and physical touch');
+  mouse('cancel');
+  assert.ok(engine.contacts.has('42'), 'mouse blur/cancel preserves physical touch');
+  mouse('down');
+  engine.clearTouchContacts();
+  assert.equal(engine.contacts.size,1, 'physical reconnect clears only physical contacts');
+  assert.ok(engine.contacts.has('mouse:a'));
+  frame([],[]);
+  now += rules.common.readyHoldSeconds*1000;
+  engine.tick();
+  assert.equal(engine.state.phase,'countdown', 'normal mouse hold survives empty physical frames');
+});
+
+test('disconnecting a stage client cancels only its mouse hold', () => {
+  const engine = new GameEngine({ rules, zones, onSave() {} });
+  startReadySession(engine); engine.join('P1'); engine.selectGame('cube_count'); engine.confirmGameSelection();
+  const payload={...floorTouchEvent(1,'down',0.5,0.5),phaseRevision:engine.phaseRevision};
+  handleMouseInput(engine,payload,'a'); handleMouseInput(engine,payload,'b');
+  engine.clearTouchContacts('mouse:a');
+  assert.deepEqual([...engine.contacts.keys()],['mouse:b']);
+});
+
+
+test('five to seven players leave the middle left-wall slot inactive during gameplay', () => {
+  for(const count of [5,6,7]) {
+    const engine=createEngine('cube_count',{participants:Array.from({length:count},(_,i)=>`P${i+1}`)});
+    const oldCenter=[320,3328-(1344+320)];
+    assert.equal(engine.canvasPosition(0,oldCenter),null);
+    const nextCenter=[320,3328-(1984+320)];
+    assert.equal(engine.canvasPosition(0,nextCenter)?.zoneId,'P2');
   }
 });

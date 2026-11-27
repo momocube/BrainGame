@@ -193,8 +193,8 @@
 /* The chosen wall tile carries its own darkened confirmation layer and round controls. */
 .shared-menu-content{position:relative}
 .shared-preview-wall-mask{position:absolute;inset:0;z-index:5;display:grid;grid-template-columns:1fr 1fr;align-items:center;justify-items:center;padding-top:128px;background:rgba(2,7,15,.82);pointer-events:none}
-.shared-preview-wall-action{width:160px;height:160px;border:4px solid;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center;box-shadow:0 8px 28px #0009}
-.shared-preview-wall-action strong{font-size:30px;line-height:1.1;font-weight:900}
+.shared-preview-wall-action{width:224px;height:224px;border:4px solid;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center;box-shadow:0 8px 28px #0009}
+.shared-preview-wall-action strong{font-size:40px;line-height:1.35;font-weight:900}
 .shared-preview-wall-action small{font-size:18px;line-height:1.15;color:inherit}
 .shared-preview-wall-confirm{border-color:#8ce8dc;background:#147d70;color:#f3fffd}
 .shared-preview-wall-cancel{border-color:#d796a2;background:#62313e;color:#fff4f5}
@@ -214,9 +214,7 @@
 .round-result-question .floor-board{width:min(86%,50vh);height:70%;max-height:100%}
 .round-results-screen>.scoreboard{width:100%;height:54%;max-height:54%;flex:0 1 54%;gap:1.5%}
 
-#mouse-test-hint{position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:20;padding:8px 14px;border:1px solid #f1c65b;border-radius:8px;background:#32270ee8;color:#ffe6a3;font:14px/1.4 sans-serif;pointer-events:none;white-space:nowrap}
-#mouse-test-hint[hidden]{display:none}
-#venue.mouse-test-enabled{cursor:pointer;user-select:none;touch-action:none}
+#venue{cursor:pointer;user-select:none;touch-action:none}
 
 .shared-exit-control{position:absolute;z-index:3;background:#111d2d;border-inline:2px solid #52657b;box-sizing:border-box;overflow:hidden}
 .shared-exit-button{position:absolute;box-sizing:border-box;display:flex;align-items:center;justify-content:center;letter-spacing:2px;font-size:38px;font-weight:900;line-height:1;white-space:nowrap;border:3px solid #be8b6f;border-radius:12px;background:#57342a;color:#fff0e2;user-select:none}
@@ -421,10 +419,49 @@
 .sequence-game-header{grid-template-rows:44px 52px 20px}
 .sequence-game-header .player-game-title{line-height:44px}
 .slither-body{position:relative}
-.slither-undo{position:absolute;display:grid;place-items:center;background:#184c5b;border:3px solid #70dcca;color:#efffff;font-size:30px;font-weight:900}
-.slither-undo.disabled{background:#26384f;border-color:#647994;color:#9aaec8}
+.slither-undo{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:50%;background:#184c5b;border:3px solid #70dcca;color:#efffff;font-size:24px;font-weight:900;line-height:1.1}
+.slither-undo-icon{font-size:42px;line-height:1}
+.slither-undo.disabled{background:#184c5b;border-color:#70dcca;color:#efffff}
+.shared-unselected-game-mask{position:absolute;inset:0;z-index:4;background:rgba(2,7,15,.94);pointer-events:none}
+.floor-score-center{position:absolute;inset:248px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.floor-score-center>.answer-only{display:grid;grid-template-rows:auto minmax(0,1fr);padding:12px;gap:8px}
+.floor-score-center>.answer-only>.round-result-question{height:100%;min-height:0;max-height:none}
+.floor-player-score{position:absolute;container-type:size;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:10px;border:2px solid #4e827f;border-radius:24px;background:#142b3a;color:#f5f8ff;text-align:center;overflow:hidden;transform-origin:center}
+.floor-player-score strong{font-size:28px;line-height:1.15;white-space:nowrap}
+.floor-player-score small{font-size:20px;line-height:1.2;color:#b7cbda;white-space:nowrap}
+.floor-player-score .result-score-value{font-size:min(100px,calc(92cqw / var(--score-width)),50cqh);line-height:1}
 .orthographic-piece{width:100%;height:auto;flex:1;min-height:0}
 .orthographic-piece svg,.puzzle-orthographic svg,.tutorial-orthographic svg{display:block;width:100%;height:100%}
 .puzzle-orthographic{width:100%;flex:1;min-height:0}
 .tutorial-orthographic{width:100%;height:310px}
 .poker-public-display .public-card,.question-content .poker-public-display .public-card,.round-result-question .poker-public-display .public-card{max-width:22%;flex-basis:22%}
+
+/* Size text in native venue units, then scale the projection only once. */
+#venue{font-size:24px}
+.player-game-header{grid-template-rows:50px 44px 32px;padding:1px 8px}
+.player-game-header .zone-detail{font-size:24px;line-height:32px;height:32px;color:#edf5ff;font-weight:700}
+.sequence-game-header{grid-template-rows:44px 52px 32px;padding:0 8px}
+.shared-game-tile small,.shared-game-prompt{font-size:28px;color:#e1edfa;font-weight:700}
+.shared-preview-wall-action small{font-size:28px;line-height:1.35}
+.shared-floor-notice{font-size:30px;color:#e1edfa}
+.slither-undo{font-size:28px}
+.floor-player-score strong{font-size:34px;line-height:1.35}
+.floor-player-score small{font-size:26px;line-height:1.35;color:#e1edfa;font-weight:700}
+.floor-player-score .result-score-value{font-size:min(100px,calc(92cqw / var(--score-width)),44cqh)}
+.zone-body-centered>.floor-title{font-size:72px}
+.zone-body-centered>.compact-info{font-size:32px;color:#e1edfa}
+.floor-score-center .floor-title{font-size:52px}
+.floor-score-center .floor-subtitle{font-size:32px;color:#e1edfa}
+.key{font-size:48px}
+.numeric-confirm{font-size:48px}
+.numeric-entry-display{grid-template-rows:28px minmax(0,1fr)}
+.numeric-entry-label{font-size:24px;line-height:28px;color:#e1edfa;font-weight:700}
+.numeric-entry-value{height:116px;font-size:128px;line-height:116px}
+.mine-toolbar small{font-size:24px}
+.mine-board .answer-cell{font-size:48px;line-height:1;font-weight:900}
+.map-player-map-area{grid-template-rows:32px 224px}
+.map-player-map-area .map-grid{width:222px;height:222px;max-width:222px;max-height:222px}
+.map-player-caption{height:32px;font-size:24px;line-height:32px;color:#e1edfa}
+.zone .map-choice-tile small{font-size:24px;color:#e1edfa}
+.confirm-button{font-size:32px}
+.cube-view-label{font-size:26px;color:#e1edfa}

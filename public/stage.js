@@ -10,7 +10,7 @@ import { renderPerspectiveSceneSvg } from './map-scene.mjs';
 import { slitherlinkBoardSvg } from './slitherlink-board.mjs';
 import { sharedTutorialWalls, illustratedTutorial } from './tutorial-presentation.mjs';
 import { getGameTutorial } from './tutorial-content.mjs';
-import { compareStageStateFreshness, scoreboardColumnCount, stageStructureKey } from './stage-rendering.mjs';
+import { compareStageStateFreshness, scoreboardColumnCount, stageStructureKey, floorPlayerScoreLayout } from './stage-rendering.mjs';
 
 const $ = (selector) => document.querySelector(selector);
 const venueWidth = CAD_SCENE.width, venueHeight = CAD_SCENE.height;
@@ -76,6 +76,7 @@ function setTextIfChanged(node, value) {
 
 function sharedMenuTile(option, data, split) {
   const tile = el('div', `shared-game-tile${option.id === 'random' ? ' random-game' : ''}`);
+  tile.dataset.gameId = option.id;
   const icons = GAME_ICONS;
   if (icons[option.id]) {
     const glow = el('div', 'shared-game-icon-glow');
@@ -89,6 +90,12 @@ function sharedMenuTile(option, data, split) {
     tile.setAttribute('aria-disabled', 'true');
     const mask = el('div', 'lobby-player-required');
     mask.append(el('strong', '', '請先選擇玩家'), el('small', '', '請由工作人員加入玩家'), el('span', '', '尚未開放選擇遊戲'));
+    tile.append(mask);
+  }
+  if (data.phase === 'game_preview' && option.id !== data.selectedGame) {
+    tile.setAttribute('aria-disabled', 'true');
+    const mask = el('div', 'shared-unselected-game-mask');
+    mask.setAttribute('aria-hidden', 'true');
     tile.append(mask);
   }
   return tile;
@@ -272,7 +279,7 @@ function renderZone(zone, view, data) {
   const isDone = panel.done || panel.eliminated;
   if (isDone) {
     body.classList.add('zone-body-centered');
-    body.append(el('div', 'floor-title', panel.eliminated ? '本輪結束' : '正確'), el('div', 'compact-info', '等待其他玩家'));
+    body.append(el('div', 'floor-title', panel.eliminated ? '本輪結束' : '你答對了'), el('div', 'compact-info', '等待其他玩家'));
     if (flashSequenceError && panel.eliminated) {
       const flash = el('div', 'sequence-wrong-flash sequence-wrong-flash-zone');
       flash.setAttribute('aria-hidden', 'true');
@@ -343,7 +350,8 @@ function renderSlitherlinkZone(body, slither = {}, q = {}, config = {}, solution
   body.classList.add('slither-body');
   body.append(board);
   if (!solution && config.undoRect) {
-    const undo = el('div', 'slither-undo' + (slither.canUndo ? '' : ' disabled'), '↶ 上一步');
+    const undo = el('div', 'slither-undo' + (slither.canUndo ? '' : ' disabled'));
+    undo.append(el('span', 'slither-undo-icon', '↶'), el('span', '', '上一步'));
     const rect = config.undoRect;
     undo.style.cssText = `left:${rect.x}px;top:${rect.y - 128}px;width:${rect.width}px;height:${rect.height}px`;
     undo.setAttribute('role', 'button');
@@ -622,6 +630,7 @@ function renderFloor(data) {
     return;
   }
   if (data.phase === 'countdown') return renderCountdown(data, floor);
+  if (['playing', 'round_results', 'final_results'].includes(data.phase)) return renderFloorPlayerScores(data);
   if (!['player-panels', 'player-only'].includes(data.layout?.questionDisplayMode)) {
     renderQuestionDisplay(data, floor);
     return;
@@ -723,6 +732,43 @@ function renderQuestionPanel(panel, data) {
   return node;
 }
 
+function renderFloorPlayerScores(data) {
+  const center = el('div', 'floor-score-center');
+  const hasFloorQuestion = !['player-panels', 'player-only'].includes(data.layout?.questionDisplayMode);
+  const result = data.results?.[0];
+  if (data.phase === 'playing' && hasFloorQuestion) renderQuestionDisplay(data, center);
+  else if (data.phase === 'round_results' && hasFloorQuestion) renderRoundResult(data, center, false);
+  else showTitle(data.phase === 'final_results' ? '本場總成績'
+    : data.phase === 'round_results' ? `${result?.gameName ?? ''}・本輪結算` : '本輪玩家進度',
+    data.phase === 'playing' ? `${gameNames[data.currentRound?.gameId] ?? ''}・第 ${data.currentRound?.round ?? ''} 輪`
+      : '請查看各自站位的地板成績', center);
+  floor.append(center);
+  const resultRows = new Map((result?.rows ?? []).map(row => [row.zoneId, row]));
+  const totals = new Map((data.finalRankings ?? []).map(row => [row.zoneId, row]));
+  const positions = floorPlayerScoreLayout(data.zones ?? [], data.layout?.floorRect, data.participantIds ?? []);
+  for (const position of positions) {
+    const id = position.zoneId;
+    const player = data.playerViews?.[id] ?? {};
+    const total = totals.get(id);
+    const row = resultRows.get(id);
+    const card = el('section', 'floor-player-score');
+    card.dataset.playerId = id;
+    card.dataset.rotation = String(position.rotation);
+    card.style.cssText = `left:${position.x}px;top:${position.y}px;width:${position.width}px;height:${position.height}px;transform:translate(-50%,-50%) rotate(${position.rotation}deg)`;
+    if (data.phase === 'round_results' && row) {
+      card.append(el('strong', '', `${id}・${row.rank ? `第 ${row.rank} 名` : '未完成'}`),
+        resultScore(row.score, row.rank, true), el('small', '', `本輪加分・累積 ${total?.score ?? player.score ?? 0} 分`));
+    } else if (data.phase === 'final_results') {
+      card.append(el('strong', '', `${id}・第 ${total?.rank ?? '—'} 名`),
+        resultScore(total?.score ?? 0, total?.rank), el('small', '', `總分・完成 ${total?.roundsPlayed ?? 0} 輪`));
+    } else {
+      const status = player.eliminated ? '本輪淘汰' : player.done ? '你答對了' : '進行中';
+      card.append(el('strong', '', `${id}・${status}`), resultScore(total?.score ?? player.score ?? 0, null), el('small', '', '累積分數'));
+    }
+    floor.append(card);
+  }
+}
+
 function renderPlayerProgress(data, target) {
   const wrap = el('div', 'floor-stack scoreboard-screen');
   wrap.append(el('div', 'floor-title', '本輪玩家進度'));
@@ -732,7 +778,7 @@ function renderPlayerProgress(data, target) {
   grid.style.gridTemplateColumns = `repeat(${scoreboardColumnCount(participantIds.length)}, minmax(0, 1fr))`;
   for (const zoneId of participantIds) {
     const player = data.playerViews?.[zoneId] ?? {};
-    const status = player.eliminated ? '本輪淘汰' : player.done ? '正確' : '進行中';
+    const status = player.eliminated ? '本輪淘汰' : player.done ? '你答對了' : '進行中';
     const item = el('div', 'result-person');
     item.append(el('strong', '', `${zoneId}・${status}`));
     item.append(el('small', '', `累積 ${(player.score ?? 0).toFixed(1)} 分${player.error ? `・${player.error}` : ''}`));
@@ -994,7 +1040,7 @@ function renderMapFirstPerson(q = {}) {
   wrap.append(el('div', 'floor-title', '固定第一人稱景象'), renderFirstPersonScene(q));
   return wrap;
 }
-function renderRoundResult(data, target = floor) {
+function renderRoundResult(data, target = floor, includeStandings = true) {
   const result = data.results?.[0];
   const wrap = el('div', 'floor-stack round-results-screen');
   wrap.append(el('div', 'floor-title', `${result?.gameName ?? ''}・第 ${result?.round ?? ''} 輪結算`));
@@ -1007,6 +1053,11 @@ function renderRoundResult(data, target = floor) {
   else if (result?.gameId === 'map_view') answerPanel.append(renderMapFloor(q, result.answer));
   else if (result?.gameId === 'memory_sequence') answerPanel.append(el('div', 'floor-subtitle', '請查看牆面，揭露本區數字順序與本輪最佳進度'));
   wrap.append(answerPanel);
+  if (!includeStandings) {
+    wrap.classList.add('answer-only');
+    target.append(wrap);
+    return;
+  }
   const grid = el('div', 'result-grid scoreboard result-scoreboard');
   const rows = [...(result?.rows ?? [])].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999));
   grid.style.gridTemplateColumns = `repeat(${target === floor && rows.length > 4 ? 4 : scoreboardColumnCount(rows.length)}, minmax(0, 1fr))`;
@@ -1079,8 +1130,6 @@ function render(data) {
   const idle = data.phase === 'idle';
   venue.classList.toggle('idle-mode', idle);
   idleParticles.setActive(idle);
-  $('#mouse-test-hint').hidden = idle || !data.input?.mouseTest;
-  venue.classList.toggle('mouse-test-enabled', Boolean(data.input?.mouseTest));
   venue.classList.toggle('exit-confirming', Boolean(data.exitConfirmation));
   if (structureKey === lastRenderedStructureKey) {
     updateVolatileStageText(data);
@@ -1130,7 +1179,7 @@ function render(data) {
     overlay.hidden = false; const card = el('div', 'overlay-card', data.phase === 'paused' ? '暫停中' : '準備繼續');
     card.append(el('small', '', data.phase === 'paused' ? '等待工作人員恢復' : secondsLeft(data.countdownMs ?? 0))); overlay.replaceChildren(card);
   } else { overlay.hidden = true; overlay.replaceChildren(); }
-  const connection = $('#connection'); connection.textContent = data.input?.ready ? 'TOUCH LINK OK' : 'WAITING FOR TOUCH SERVICE';
+  const connection = $('#connection'); connection.textContent = data.input?.ready ? 'TOUCH + MOUSE READY' : 'MOUSE READY';
   lastRenderedStructureKey = structureKey;
 }
 
@@ -1277,6 +1326,5 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') reportStagePaint();
 });
 document.addEventListener('keydown', (event) => { if (event.key.toLowerCase() === 'f') document.documentElement.requestFullscreen?.(); });
-installMouseInput(venue, () => ({ enabled: state?.input?.mouseTest,
-  clientId: stageClientId, revision: state?.input?.phaseRevision }),
+installMouseInput(venue, () => ({ clientId: stageClientId, revision: state?.input?.phaseRevision }),
   (message) => { $('#connection').textContent = message; });

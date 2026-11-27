@@ -51,7 +51,7 @@ function advance(engine, milliseconds) {
 function slitherEngine({ participants = ['P1'], round = 1, seed = 1234 } = {}) {
   const engine = new GameEngine({ rules, zones, onSave() {}, seedFactory: () => seed });
   engine.setInputStatus(true, '測試 TouchService 已就緒');
-  engine.startSession();
+  engine.startSession({ initialPlayerCount: 0 });
   for (const id of participants) engine.join(id);
   engine.selectGame('slitherlink');
   engine.confirmGameSelection();

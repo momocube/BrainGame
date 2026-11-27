@@ -23,8 +23,17 @@ function grid(values,cols,{x=145,y=28,size=70,colors=[],highlight=[]}={}) {
   return values.map((value,i)=>{const cx=x+i%cols*size,cy=y+Math.floor(i/cols)*size;return rect(cx,cy,size-4,size-4,colors[i]??'#edf3fa',highlight.includes(i)?'#ffcf4f':'#647995')+text(cx+(size-4)/2,cy+(size-4)/2,value,28,colors[i]==='#000'?'#fff':'#142338');}).join('');
 }
 function mine(step) {
-  const values=step===0?['起','','','','','','','','']:step===1?['0','0','0','0','1','1','0','1','⚑']:['0','0','0','0','1','1','0','1','⚑'];
-  return svg(rect(140,15,360,48,step===1?'#ffce3a':'#1262b5')+text(320,40,step===1?'標記模式':'揭露模式',26,step===1?'#182536':'#fff')+grid(values,3,{x:205,y:78,size:78,highlight:[step===0?0:8]})+(step<2?pointer(step===0?242:398,step===0?115:271):text(320,370,'安全格全部完成 ✓',32,'#70e4ce')));
+  const values=step===0?['起','','','','','','','','']:['0','0','0','0','1','1','0','1','flag'];
+  const board=values.map((value,index)=>{
+    const x=163+(index%3)*106,y=76+Math.floor(index/3)*106;
+    const flagged=value==='flag',covered=step===0||flagged;
+    const cell=rect(x,y,102,102,flagged?'#ffce3a':covered?'#26384f':'#edf3fa','#8ba4bf');
+    const mark=flagged
+      ? `<path d="M${x+36} ${y+78}V${y+23}L${x+77} ${y+37}L${x+36} ${y+51}M${x+24} ${y+79}H${x+50}" fill="#172536" stroke="#172536" stroke-width="5" stroke-linejoin="round"/>`
+      : text(x+51,y+51,value,48,covered?'#fff':'#142338');
+    return cell+mark;
+  }).join('');
+  return svg(rect(140,10,360,54,step===1?'#ffce3a':step===2?'#147d70':'#1262b5')+text(320,38,step===1?'標記模式':step===2?'安全格完成 ✓':'揭露模式',34,step===1?'#182536':'#fff')+board+(step<2?pointer(step===0?214:426,step===0?127:339):''));
 }
 function zero(step) {
   const values=Array(25).fill(9);Object.assign(values,{6:1,7:-1,11:-1,12:1});

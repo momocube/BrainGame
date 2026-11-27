@@ -832,7 +832,7 @@ export class GameEngine {
   snapshot() {
     const state = structuredClone(this.state);
     state.input = { ready: this.inputsReady, detail: this.inputDetail,
-      mouseTest: Boolean(this.mouseTestEnabled), phaseRevision: this.phaseRevision };
+      mouseAvailable: true, phaseRevision: this.phaseRevision };
     state.sharedExitControl = structuredClone(this.zoneConfig.sharedExitControl ?? null);
     const tutorialContacts = this.state.phase === 'tutorial' && !this.state.exitConfirmation ? [...this.contacts.values()].filter((contact) =>
       !contact.cancelled && contact.phaseRevision === this.phaseRevision && contact.holdTarget?.kind === 'complete-tutorial') : [];
@@ -901,18 +901,27 @@ export class GameEngine {
 
   assertCanStartSession() {
     if (this.state.phase !== 'idle') throw new Error('請先結束目前場次並返回待機');
-    if (!this.inputsReady) throw new Error(`TouchService 尚未就緒，無法開始場次：${this.inputDetail}`);
   }
 
-  startSession() {
+  startSession({ initialPlayerCount = 4 } = {}) {
     this.assertCanStartSession();
+    const maximum = Math.min(this.knownPlayerIds.size, this.configuredRules.common.maxAnswerZones ?? this.knownPlayerIds.size);
+    if (!Number.isInteger(initialPlayerCount) || initialPlayerCount < 0 || initialPlayerCount > maximum) {
+      throw new Error(`初始玩家數必須介於 0 與 ${maximum} 之間`);
+    }
     this.configureRules(this.configuredRules);
     this.state = this.newState();
     this.refreshPlayerLayout();
     this.state.sessionId = crypto.randomUUID();
     this.state.sessionStartedAt = new Date().toISOString();
     this.state.phase = 'lobby';
-    this.state.notice = '場次開始；由工作人員在大廳加入玩家。';
+    for (let i = 1; i <= initialPlayerCount; i++) {
+      const id = `P${i}`;
+      this.state.participantIds.push(id);
+      this.state.participants[id] = { zoneId: id, name: id, joinedAt: this.state.sessionStartedAt, totalHalfPoints: 0, roundsPlayed: 0 };
+    }
+    this.refreshPlayerLayout();
+    this.state.notice = `場次開始；已加入 ${initialPlayerCount} 位玩家，可直接選擇遊戲，或由工作人員繼續加入玩家。`;
     this.save();
   }
 
@@ -1032,12 +1041,13 @@ export class GameEngine {
   }
 
   setInputStatus(ready, detail) {
-    const changed = ready !== this.inputsReady || detail !== this.inputDetail;
+    const wasReady = this.inputsReady;
+    const changed = ready !== wasReady || detail !== this.inputDetail;
     this.inputsReady = ready;
     this.inputDetail = detail;
     if (changed && this.state.sessionId && !['idle', 'final_results', 'paused'].includes(this.state.phase)) {
-      if (!ready) this.pause(`觸控服務中斷：${detail}`, 'touch-service');
-      else this.state.notice = '觸控服務已連線；請由工作人員確認後繼續。';
+      if (!ready && wasReady) this.pause(`觸控服務中斷：${detail}`, 'touch-service');
+      else if (ready) this.state.notice = '觸控服務已連線；請由工作人員確認後繼續。';
     }
     if (changed) this.changed();
   }
@@ -1425,7 +1435,9 @@ export class GameEngine {
     }
     if (gameId === 'slitherlink') {
       const config = this.rules.games.slitherlink;
-      if (config.undoRect && inside(config.undoRect)) {
+      const undo = config.undoRect;
+      if (undo && ((x - undo.x - undo.width / 2) / (undo.width / 2)) ** 2 +
+          ((y - undo.y - undo.height / 2) / (undo.height / 2)) ** 2 <= 1) {
         this.act(zoneId, { type: 'undo' }, eventElapsedMs); return;
       }
       const index = slitherlinkEdgeAt(x, y, config.boardRect, config.boardColumns, config.boardRows);
@@ -1507,11 +1519,15 @@ export class GameEngine {
       position?.zoneId === contact.zoneId && this.pointInsideHoldTarget(contact.holdTarget.rect, position));
   }
 
-  clearTouchContacts() {
-    this.contacts.clear();
+  clearTouchContacts(source = 'touch') {
+    let removed = false;
+    for (const [id, contact] of this.contacts) {
+      if ((contact.source ?? 'touch') === source) { this.contacts.delete(id); removed = true; }
+    }
+    if (removed && this.state.phase === 'tutorial') this.changed();
   }
 
-  handleTouchFrame(frame) {
+  handleTouchFrame(frame, { source = 'touch' } = {}) {
     if (!frame || frame.v !== 1 || frame.venue !== '704' || !Array.isArray(frame.events) || !Array.isArray(frame.alive)) return;
     const effects = [];
     const receivedAt = this.clock();
@@ -1523,7 +1539,7 @@ export class GameEngine {
         if (!this.contacts.has(key)) {
           const holdTarget = this.touchHoldTarget(position.zoneId, position);
           const contact = {
-            ...position, started: receivedAt, eventElapsedMs: this.activeElapsedAt(receivedAt),
+            ...position, source, started: receivedAt, eventElapsedMs: this.activeElapsedAt(receivedAt),
             releaseDelayMs: this.touchReleaseTimeoutMs,
             holdTarget, phaseRevision: this.phaseRevision,
             requiresHold: Boolean(holdTarget), cancelled: false
@@ -1548,7 +1564,9 @@ export class GameEngine {
       }
     }
     const alive = new Set(frame.alive.map(String));
-    for (const id of this.contacts.keys()) if (!alive.has(id)) this.contacts.delete(id);
+    for (const [id, contact] of this.contacts) {
+      if ((contact.source ?? 'touch') === source && !alive.has(id)) this.contacts.delete(id);
+    }
     if (this.completeHeldTutorial(receivedAt)) return;
     if (this.state.phase === 'tutorial') this.changed();
     this.batchDepth++;
@@ -1715,7 +1733,7 @@ export class GameEngine {
       { action: 'cancel', x: 0.75 }
     ];
     for (const button of buttons) {
-      if (Math.hypot(u - button.x, v - 0.6) <= 0.125) return button.action;
+      if (Math.hypot(u - button.x, v - 0.6) <= 0.175) return button.action;
     }
     return null;
   }

@@ -3,25 +3,25 @@
   "floorRect": { "face": 2, "rect": { "x": 640, "y": 640, "width": 2048, "height": 1408 } },
   "profiles": {
     "4": {
-      "playerSlots": ["P1", "P4", "P6", "entrance-east"],
+      "playerSlots": ["P2", "P4", "P6", "entrance-east"],
       "questionPanelSlots": ["top-question", "left-question", "right-question", "entrance-question"],
       "questionDisplayMode": "player-panels",
       "floorRole": "standings"
     },
     "5": {
-      "playerSlots": ["P1", "P2", "P4", "P6", "P8"],
+      "playerSlots": ["P1", "P3", "P4", "P6", "P8"],
       "questionPanelSlots": [],
       "questionDisplayMode": "floor",
       "floorRole": "question"
     },
     "6": {
-      "playerSlots": ["P1", "P2", "P4", "P5", "P6", "P7"],
+      "playerSlots": ["P1", "P3", "P4", "P5", "P6", "P7"],
       "questionPanelSlots": [],
       "questionDisplayMode": "floor",
       "floorRole": "question"
     },
     "7": {
-      "playerSlots": ["P1", "P2", "P4", "P5", "P6", "P7", "P8"],
+      "playerSlots": ["P1", "P3", "P4", "P5", "P6", "P7", "P8"],
       "questionPanelSlots": [],
       "questionDisplayMode": "floor",
       "floorRole": "question"
@@ -46,7 +46,7 @@
       "name": "對面長牆題目區",
       "face": 0,
       "rotationDegrees": 0,
-      "rect": { "x": 1344, "y": 0, "width": 640, "height": 640 }
+      "rect": { "x": 704, "y": 0, "width": 640, "height": 640 }
     },
     "left-question": {
       "name": "左側題目區",

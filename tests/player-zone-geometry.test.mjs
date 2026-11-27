@@ -5,6 +5,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { resolvePlayerLayout } from '../src/player-layouts.mjs';
 import { validatePlayerZoneConfig } from '../src/player-zone-geometry.mjs';
+import { floorPlayerScoreLayout } from '../public/stage-rendering.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const layout = {
@@ -12,6 +13,29 @@ const layout = {
   profilePlan: JSON.parse(fs.readFileSync(path.join(ROOT, 'config/player-layouts.704.json'), 'utf8'))
 };
 const touchProfile = JSON.parse(fs.readFileSync(path.join(ROOT, 'config/venue-704.json'), 'utf8'));
+
+test('floor score cards follow every player position without overlap or leaving the floor', () => {
+  for(let count=1;count<=8;count++) {
+    const profile=resolvePlayerLayout(layout,count);
+    const ids=Array.from({length:count},(_,i)=>`P${i+1}`);
+    const floor=profile.floorRect.rect;
+    const cards=floorPlayerScoreLayout(profile.players,floor,ids);
+    assert.equal(cards.length,count);
+    const bounds=cards.map(card=>{
+      const zone=profile.players.find(z=>z.id===card.zoneId);
+      assert.equal(card.rotation,zone.rotationDegrees);
+      const sideways=card.rotation===90||card.rotation===270;
+      const width=sideways?card.height:card.width,height=sideways?card.width:card.height;
+      const rect={x:card.x-width/2,y:card.y-height/2,width,height};
+      assert.ok(rect.x>=0&&rect.y>=0&&rect.x+width<=floor.width&&rect.y+height<=floor.height,`${count} players: ${card.zoneId} in bounds`);
+      return rect;
+    });
+    for(let i=0;i<bounds.length;i++) for(let j=i+1;j<bounds.length;j++) {
+      const a=bounds[i],b=bounds[j];
+      assert.ok(a.x+a.width<=b.x||b.x+b.width<=a.x||a.y+a.height<=b.y||b.y+b.height<=a.y,`${count} players: ${ids[i]} and ${ids[j]} do not overlap`);
+    }
+  }
+});
 
 test('704 player-zone configuration stays within real TouchService faces and clear of the entrance', () => {
   assert.equal(validatePlayerZoneConfig(layout, touchProfile), true);
@@ -99,10 +123,10 @@ test('ignored floor and decorative faces cannot become player input sources', ()
 
 test('4–8 player counts resolve to the approved CAVE profiles and ordered player IDs', () => {
   const expected = {
-    4: ['對面長牆玩家 A', '左側玩家 A', '右側玩家 A', '入口側外側玩家'],
-    5: ['對面長牆玩家 A', '對面長牆玩家 B', '左側玩家 A', '右側玩家 A', '入口側外側玩家'],
-    6: ['對面長牆玩家 A', '對面長牆玩家 B', '左側玩家 A', '左側玩家 B', '右側玩家 A', '右側玩家 B'],
-    7: ['對面長牆玩家 A', '對面長牆玩家 B', '左側玩家 A', '左側玩家 B', '右側玩家 A', '右側玩家 B', '入口側外側玩家'],
+    4: ['對面長牆玩家 B', '左側玩家 A', '右側玩家 A', '入口側外側玩家'],
+    5: ['對面長牆玩家 A', '對面長牆玩家 C', '左側玩家 A', '右側玩家 A', '入口側外側玩家'],
+    6: ['對面長牆玩家 A', '對面長牆玩家 C', '左側玩家 A', '左側玩家 B', '右側玩家 A', '右側玩家 B'],
+    7: ['對面長牆玩家 A', '對面長牆玩家 C', '左側玩家 A', '左側玩家 B', '右側玩家 A', '右側玩家 B', '入口側外側玩家'],
     8: layout.players.map((player) => player.name)
   };
   for (const count of [4, 5, 6, 7, 8]) {
@@ -116,6 +140,12 @@ test('4–8 player counts resolve to the approved CAVE profiles and ordered play
 
 test('4-player question panels are output-only and stay clear of touch zones and entrance', () => {
   const resolved = resolvePlayerLayout(layout, 4);
+  const player = resolved.players.find(zone => zone.id === 'P1');
+  assert.equal(player.rect.x + player.rect.width / 2, resolved.floorRect.rect.x + resolved.floorRect.rect.width / 2,
+    'the physical left-wall player is centered on the wall');
+  assert.deepEqual(player.sources, [{ face: 0, ...player.rect }], 'input moves with the centered player');
+  const floorScore = floorPlayerScoreLayout(resolved.players, resolved.floorRect.rect, ['P1'])[0];
+  assert.equal(floorScore.x, resolved.floorRect.rect.width / 2, 'floor score follows the centered player');
   assert.equal(resolved.questionDisplayMode, 'player-panels');
   assert.equal(resolved.questionPanels.length, 4);
   assert.ok(resolved.questionPanels.every((panel, index) => panel.playerId === `P${index + 1}`));
@@ -162,4 +192,24 @@ test('independent random menu has a full wall and cannot overlap the entrance or
   const bad = structuredClone(layout);
   bad.menuExtraZones[0].rect.x = 1344;
   assert.throws(() => validatePlayerZoneConfig(bad, touchProfile), /入口保留區/);
+});
+
+
+test('two players on physical left wall use outer slots while eight-player layout retains all three', () => {
+  const originalP2=layout.players.find(p=>p.id==='P2');
+  const originalP3=layout.players.find(p=>p.id==='P3');
+  for(const count of [5,6,7]) {
+    const resolved=resolvePlayerLayout(layout,count);
+    const [p1,p2]=resolved.players;
+    assert.equal(p2.id,'P2');
+    assert.deepEqual(p2.rect,originalP3.rect);
+    assert.deepEqual(p2.sources,originalP3.sources,'display and hit regions move together');
+    assert.equal(p2.rect.x-(p1.rect.x+p1.rect.width),640,'one player-width gap');
+    assert.equal(resolved.players.filter(p=>p.sources.some(s=>s.face===0)).length,2);
+  }
+  assert.deepEqual(resolvePlayerLayout(layout,8).players[1].rect,originalP2.rect);
+  assert.deepEqual(resolvePlayerLayout(layout,8).players[2].rect,originalP3.rect);
+  for(const count of [1,2,3,4]) {
+    assert.equal(resolvePlayerLayout(layout,count).players.filter(p=>p.sources.some(s=>s.face===0)).length,1);
+  }
 });

@@ -400,7 +400,9 @@ function renderZones(data) {
   list.replaceChildren();
   const count = data.participantIds?.length ?? 0;
   const profile = data.layout?.profileCount ?? data.zones?.length ?? 8;
-  $('#roster-help').textContent = `${count} 位玩家・套用 ${profile} 人版型；依 P 編號站位`;
+  $('#roster-help').textContent = data.phase === 'idle'
+    ? '開始場次自動加入四位玩家；可在大廳繼續增加至八位'
+    : `${count} 位玩家・套用 ${profile} 人版型；依 P 編號站位`;
   const addPlayer = $('#join-next-player');
   addPlayer.hidden = data.phase !== 'lobby' || count >= 8;
   addPlayer.textContent = `工作人員代加入下一位（P${count + 1}）`;
@@ -454,13 +456,7 @@ function render(data) {
   $('#notice').textContent = data.notice || '';
   const touch = data.input ?? { ready: false, detail: '尚未連線' };
   const touchPill = $('#touch-status');
-  touchPill.textContent = touch.mouseTest ? '滑鼠測試模式｜可直接點擊遊戲畫面'
-    : touch.ready ? `TouchService 已連線｜${touch.detail}` : `TouchService 未就緒｜${touch.detail}`;
-  const mouseTest = $('#mouse-test');
-  mouseTest.textContent = touch.mouseTest ? '關閉滑鼠測試' : '開啟滑鼠測試';
-  mouseTest.setAttribute('aria-pressed', String(Boolean(touch.mouseTest)));
-  mouseTest.disabled = !['idle', 'final_results'].includes(data.phase);
-  mouseTest.title = '待機或總結算時可切換；開啟後可用滑鼠點擊及長按遊戲畫面，不需連接 TouchService';
+  touchPill.textContent = touch.ready ? `TouchService 已連線｜${touch.detail}` : `TouchService 未就緒｜${touch.detail}；可直接使用滑鼠`;
   touchPill.className = `status-pill ${touch.ready ? 'online' : 'offline'}`;
   const stageConnections = data.output?.stageConnections ?? 0;
   const stageReady = Boolean(data.output?.stageReady);
@@ -496,19 +492,15 @@ function render(data) {
 
   const active = !['idle', 'final_results'].includes(data.phase);
   const startSession = $('#start-session');
-  startSession.disabled = data.phase !== 'idle' || !touch.ready || !stageReady;
-  startSession.title = !touch.ready ? `TouchService 未就緒：${touch.detail}`
-    : !stageReady ? '遊戲畫面尚未完成繪製或回報逾時' : '開始 45 分鐘場次';
-  $('#start-session-help').textContent = !touch.ready
-    ? `TouchService 未就緒，暫時不能開始場次：${touch.detail}`
-    : !stageReady ? '遊戲畫面尚未完成繪製或回報逾時，請確認第二螢幕後再開始場次。'
-      : touch.mouseTest ? '滑鼠測試已開啟：開始場次並加入玩家後，可直接點擊遊戲畫面；完成教學請按住按鈕約 1 秒後放開。'
-        : 'TouchService 與遊戲畫面已就緒，可以開始 45 分鐘場次。';
+  startSession.disabled = data.phase !== 'idle' || !stageReady;
+  startSession.title = !stageReady ? '遊戲畫面尚未完成繪製或回報逾時' : '開始 45 分鐘場次';
+  $('#start-session-help').textContent = !stageReady
+    ? '遊戲畫面尚未完成繪製或回報逾時，請確認第二螢幕後再開始場次。'
+    : '可直接用滑鼠點擊第二螢幕的遊戲畫面；教學按住約 1 秒即開始，無需切換模式。';
   $('#pause-session').disabled = !active || data.phase === 'paused';
   const resumeSession = $('#resume-session');
-  resumeSession.disabled = data.phase !== 'paused' || !touch.ready || !stageReady;
-  resumeSession.title = !touch.ready ? `TouchService 未就緒：${touch.detail}`
-    : !stageReady ? '遊戲畫面尚未完成繪製或回報逾時，無法繼續場次。' : '繼續場次';
+  resumeSession.disabled = data.phase !== 'paused' || !stageReady;
+  resumeSession.title = !stageReady ? '遊戲畫面尚未完成繪製或回報逾時，無法繼續場次。' : '繼續場次';
   $('#end-session').disabled = data.phase === 'idle';
   $('#end-session').textContent = data.phase === 'final_results' ? '遊戲結束・返回待機' : '立即結束場次';
   const startTutorial = $('#start-tutorial');
@@ -516,7 +508,7 @@ function render(data) {
   startTutorial.textContent = data.phase === 'game_preview' ? '代玩家確認遊戲並進入教學' : '代玩家完成教學並開始倒數';
   $('#return-lobby').disabled = !['game_preview', 'tutorial', 'countdown', 'playing', 'round_results', 'paused', 'resume_countdown'].includes(data.phase)
     || data.sessionExpired || data.remainingSessionMs <= 0
-    || (['paused', 'resume_countdown'].includes(data.phase) && (!touch.ready || !stageReady));
+    || (['paused', 'resume_countdown'].includes(data.phase) && !stageReady);
   $('#restart-round').disabled = !['countdown', 'playing'].includes(data.phase);
   $('#cancel-round').disabled = !['countdown', 'playing'].includes(data.phase);
   if (ruleSettings) setRulesEditable(['idle', 'final_results'].includes(data.phase));
@@ -531,7 +523,6 @@ function render(data) {
 }
 
 $('#start-session').addEventListener('click', () => control('start-session'));
-$('#mouse-test').addEventListener('click', () => control('set-mouse-test', { enabled: !state?.input?.mouseTest }));
 $('#pause-session').addEventListener('click', () => control('pause'));
 $('#resume-session').addEventListener('click', () => control('resume'));
 $('#end-session').addEventListener('click', () => control(state?.phase === 'final_results' ? 'return-to-standby' : 'end-session'));

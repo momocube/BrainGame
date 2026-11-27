@@ -19,3 +19,7 @@
 .question-preflight-row small{grid-column:1/-1;color:#ffb5a8;line-height:1.45}
 @media(max-width:760px){.question-preflight-list{grid-template-columns:1fr}}
 .touch-diagnostics-timing{font-size:10px;color:#aebed3;margin:-3px 0 6px;padding:6px 8px;border-radius:5px;background:#182438}
+.topbar{height:auto;min-height:86px;flex-wrap:wrap;gap:16px}
+.header-actions{flex-wrap:wrap;min-width:0;max-width:100%;gap:8px}
+.header-actions .button{flex:0 0 auto;white-space:nowrap}
+.header-actions .status-pill{max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.5}

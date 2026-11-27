@@ -1,6 +1,5 @@
 // Mouse points use the same merged canvas and hit testing as TouchService.
 export function handleMouseInput(engine, payload, clientId) {
-  if (!engine.mouseTestEnabled) throw new Error('請先在後台開啟滑鼠測試模式');
   if (!['down', 'move', 'up', 'cancel'].includes(payload.phase)) throw new Error('無效的滑鼠操作');
   const id = `mouse:${clientId}`;
   const cancel = () => {
@@ -30,6 +29,6 @@ export function handleMouseInput(engine, payload, clientId) {
     engine.touchReleaseTimeoutMs = 0;
     engine.handleTouchFrame({ v: 1, venue: '704',
       events: [{ id, phase: payload.phase, face, px }],
-      alive: payload.phase === 'up' ? [] : [id] });
+      alive: payload.phase === 'up' ? [] : [id] }, { source: id });
   } finally { engine.touchReleaseTimeoutMs = releaseDelay; }
 }

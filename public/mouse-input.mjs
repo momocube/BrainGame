@@ -15,7 +15,7 @@ export function installMouseInput(venue, getContext, reportError) {
   };
   venue.addEventListener('pointerdown', (event) => {
     const context = getContext();
-    if (!context.enabled || !context.clientId || event.pointerType !== 'mouse' || event.button !== 0 || pointer) return;
+    if (!context.clientId || event.pointerType !== 'mouse' || event.button !== 0 || pointer) return;
     event.preventDefault();
     pointer = { id: event.pointerId, ...context };
     venue.setPointerCapture(event.pointerId);
