@@ -1,4 +1,5 @@
-import { orthographicSignature } from '../public/solid-views.mjs';
+import { generateObjectQuestion, objectProjectionSignature } from '../public/object-views.mjs';
+import { orthographicSignature, remainingSolidCells } from '../public/solid-views.mjs';
 import crypto from 'node:crypto';
 import { pokerTiming } from '../public/poker-timing.mjs';
 import { resolvePlayerLayout } from './player-layouts.mjs';
@@ -24,7 +25,7 @@ const CARD_RANKS = '23456789TJQKA';
 const CARD_SUITS = ['♣', '♦', '♥', '♠'];
 const RANDOM_GAME_ID = 'random';
 const RNG_ALGORITHM = 'mulberry32-v1';
-const QUESTION_GENERATOR_VERSION = '1.0.3';
+const QUESTION_GENERATOR_VERSION = '1.0.5';
 // TouchService 704 uses a 2688×3840 canvas. Rotate clockwise, then remove
 // the 512 px blank strip to match the 3328×2688 CAD player-zone profile.
 const TOUCH_CANVAS_HEIGHT = 3840;
@@ -169,6 +170,9 @@ function makeMineBoard(round, config, randomInt) {
       return count;
     });
     const board = { cols, rows, anchor, mines, numbers };
+    const opening = { revealed: [], flags: [], safeProgress: 0 };
+    revealSafe(board, opening, anchor);
+    if (config.maxInitialRevealCells != null && opening.revealed.length > config.maxInitialRevealCells) continue;
     if (canSolveMinesWithoutGuessing(board)) return board;
   }
   throw new Error(`無法產生第 ${round} 輪免猜測地雷盤`);
@@ -207,7 +211,93 @@ function makeCubeModel(round, config, randomInt) {
   throw new Error('無法產生有效方塊題目');
 }
 
+// A missing voxel is inferable only if at least one entire sight line is empty.
+// Their union is a lower bound on the missing volume; when it equals the piece
+// volume, no hidden removal can be substituted without changing a silhouette.
+function visibleMissingCells(target, missing) {
+  const removed = new Set(missing.map(cell => cell.join(',')));
+  return missing.filter(cell => [0, 1, 2].some(axis => {
+    for (let depth = 0; depth < target[axis]; depth++) {
+      const point = [...cell]; point[axis] = depth;
+      if (!removed.has(point.join(','))) return false;
+    }
+    return true;
+  }));
+}
+
+const visibleSolidHoleCache = new Map();
+function visibleSolidHoles(target, minimum, maximum) {
+  const cacheKey = `${target.join(',')}:${minimum}:${maximum}`;
+  if (visibleSolidHoleCache.has(cacheKey)) return visibleSolidHoleCache.get(cacheKey);
+  const all = remainingSolidCells(target, []);
+  const rays = new Map();
+  for (const cell of all) for (let axis = 0; axis < 3; axis++) {
+    const key = `${axis}:${cell.filter((_, i) => i !== axis).join(',')}`;
+    if (!rays.has(key)) rays.set(key, all.filter(point => point.every((n, i) => i === axis || n === cell[i])));
+  }
+  const frontier = [[]], seen = new Set(['']), holes = [];
+  for (let index = 0; index < frontier.length; index++) {
+    const cells = frontier[index];
+    if (cells.length >= minimum && isConnectedShape(cells) && isConnectedShape(remainingSolidCells(target, cells))) holes.push(cells);
+    if (cells.length >= maximum) continue;
+    for (const ray of rays.values()) {
+      const union = new Map([...cells, ...ray].map(cell => [cell.join(','), cell]));
+      if (union.size > maximum || union.size === cells.length) continue;
+      const keys = [...union.keys()].sort(), key = keys.join(';');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      frontier.push(keys.map(key => union.get(key)));
+    }
+  }
+  visibleSolidHoleCache.set(cacheKey, holes);
+  return holes;
+}
+
+/** Compare remaining solids, allowing proper rotations and every in-bounds translation. */
+function solidChoiceMatchesViews(target, missing, cells) {
+  const expected = orthographicSignature(remainingSolidCells(target, missing), target);
+  const required = visibleMissingCells(target, missing).map(cell => cell.join(','));
+  const orientations = new Set();
+  for (const rotate of ROTATIONS_3D) {
+    const rotated = normalizeShape(cells.map(rotate)), key = JSON.stringify(rotated);
+    if (orientations.has(key)) continue;
+    orientations.add(key);
+    const size = [0, 1, 2].map(axis => Math.max(...rotated.map(cell => cell[axis])) + 1);
+    for (let x = 0; x <= target[0] - size[0]; x++) for (let y = 0; y <= target[1] - size[1]; y++) for (let z = 0; z <= target[2] - size[2]; z++) {
+      const placed = rotated.map(cell => [cell[0] + x, cell[1] + y, cell[2] + z]);
+      const removed = new Set(placed.map(cell => cell.join(',')));
+      // Empty rays force every voxel on them to be removed, a safe early-out.
+      if (!required.every(key => removed.has(key))) continue;
+      if (orthographicSignature(remainingSolidCells(target, placed), target) === expected) return true;
+    }
+  }
+  return false;
+}
+
+function makeVisibleSolidPuzzle(round, config, randomInt) {
+  const band = difficultyBand(config, round), target = band.targetDimensions;
+  const holes = visibleSolidHoles(target, band.missingCubesMin, band.missingCubesMax);
+  if (!holes.length) throw new Error('此尺寸與缺口體積無法產生可由現有物件三視圖推斷的題目');
+  const volumes = [...new Set(holes.map(cells => cells.length))];
+  const volume = volumes[randomInt(volumes.length)];
+  const candidates = holes.filter(cells => cells.length === volume);
+  const missing = candidates[randomInt(candidates.length)];
+  const correctShape = normalizeShape(missing), correctKey = canonicalShape(correctShape);
+  const distractors = new Map();
+  for (let attempt = 0; attempt < 20_000 && distractors.size < config.optionCount - 1; attempt++) {
+    const shape = randomConnectedShape(volume, target, randomInt);
+    if (!shape) continue;
+    const key = canonicalShape(shape);
+    if (key !== correctKey && !distractors.has(key) && !solidChoiceMatchesViews(target, missing, shape)) distractors.set(key, shape);
+  }
+  if (distractors.size !== config.optionCount - 1) throw new Error('無法產生三視圖唯一解的六個零件');
+  const choices = shuffle([{ cells: correctShape, correct: true }, ...[...distractors.values()].map(cells => ({ cells, correct: false }))], randomInt)
+    .map((choice, index) => ({ id: String.fromCharCode(65 + index), ...choice }));
+  return { kind: 'remaining_solid_views', volume, target, missing, choices, correctId: choices.find(choice => choice.correct).id };
+}
+
 function makeSolidPuzzle(round, config, randomInt) {
+  if (config.questionMode === 'remaining_solid_views') return makeVisibleSolidPuzzle(round, config, randomInt);
   const band = difficultyBand(config, round);
   const target = band.targetDimensions;
   const volume = randomInt(band.missingCubesMin, band.missingCubesMax + 1);
@@ -259,6 +349,7 @@ function makePoker(round, config, randomInt) {
 }
 
 function makeMapQuestion(round, config, randomInt) {
+  if (config.questionMode === 'object_views') return generateObjectQuestion(round, randomInt, config.optionCount);
   const band = difficultyBand(config, round);
   const cols = band.mapColumns, rows = band.mapRows;
   const landmarkCount = band.landmarkTypes;
@@ -556,6 +647,11 @@ function validateGeneratedQuestion(gameId, round, question, rules) {
       }
       if (numbers[index] !== (mineSet.has(index) ? -1 : adjacent)) generatedQuestionError(`踩地雷第 ${round} 輪數字與地雷位置不一致`);
     }
+    const opening = { revealed: [], flags: [], safeProgress: 0 };
+    revealSafe(question, opening, anchor);
+    if (config.maxInitialRevealCells != null && opening.revealed.length > config.maxInitialRevealCells) {
+      generatedQuestionError(`踩地雷第 ${round} 輪起點展開超過 ${config.maxInitialRevealCells} 格`);
+    }
     if (!canSolveMinesWithoutGuessing(question)) generatedQuestionError(`踩地雷第 ${round} 輪無法依規則推理完成`);
     return;
   }
@@ -607,6 +703,16 @@ function validateGeneratedQuestion(gameId, round, question, rules) {
         new Set(keys).size !== keys.length) {
       generatedQuestionError(`立體拼圖第 ${round} 輪缺口或選項不唯一／無法補合`);
     }
+    if (config.questionMode === 'remaining_solid_views' || question.kind === 'remaining_solid_views') {
+      const band = difficultyBand(config, round);
+      const matches = question.choices.filter(choice => solidChoiceMatchesViews(dimensions, question.missing, choice.cells));
+      if (question.kind !== 'remaining_solid_views' || question.volume < band.missingCubesMin || question.volume > band.missingCubesMax ||
+          visibleMissingCells(dimensions, question.missing).length !== question.volume ||
+          !isConnectedShape(remainingSolidCells(dimensions, question.missing)) ||
+          matches.length !== 1 || matches[0].id !== question.correctId) {
+        generatedQuestionError(`立體拼圖第 ${round} 輪現有物件三視圖缺口不可推斷或選項有歧義`);
+      }
+    }
     return;
   }
 
@@ -623,6 +729,19 @@ function validateGeneratedQuestion(gameId, round, question, rules) {
   }
 
   if (gameId === 'map_view') {
+    if (config.questionMode === 'object_views') {
+      const choices = question.choices;
+      const signatures = choices.map(c => objectProjectionSignature(c.object));
+      const target = objectProjectionSignature(question.object);
+      const correct = choices.find(c => c.id === question.correctId);
+      if (question.kind !== 'object_views' || choices.length !== config.optionCount ||
+          new Set(choices.map(c => c.id)).size !== choices.length || new Set(signatures).size !== choices.length ||
+          choices.filter(c => c.correct).length !== 1 || !correct?.correct ||
+          objectProjectionSignature(correct.object) !== target || signatures.filter(s => s === target).length !== 1) {
+        generatedQuestionError('三視圖物件題目與六個立體選項必須有唯一正解');
+      }
+      return;
+    }
     const band = difficultyBand(config, round);
     const correctChoices = question.choices.filter((choice) => choice.correct);
     const correct = question.choices.find((choice) => choice.id === question.correctId);

@@ -309,6 +309,9 @@ function validateGameStructure(gameId, config) {
       throw new Error('3D 數方塊數字輸入範圍必須是 1 到 150 之內');
     }
   }
+  if (gameId === 'solid_puzzle' && config.questionMode !== undefined && config.questionMode !== 'remaining_solid_views') {
+    throw new Error('solid_puzzle.questionMode 不支援此題目模式');
+  }
   if (gameId === 'minesweeper') {
     assertInteger(config.boardColumns, `${gameId}.boardColumns`, 1, 100);
     assertInteger(config.boardRows, `${gameId}.boardRows`, 1, 100);
@@ -323,6 +326,9 @@ function validateGameStructure(gameId, config) {
       Math.max(0, config.mandatoryStartCellOneBased.row - 1 - config.startSafeRadiusCells) + 1;
     const safeColumns = Math.min(config.boardColumns - 1, config.mandatoryStartCellOneBased.column - 1 + config.startSafeRadiusCells) -
       Math.max(0, config.mandatoryStartCellOneBased.column - 1 - config.startSafeRadiusCells) + 1;
+    if (config.maxInitialRevealCells != null) {
+      assertInteger(config.maxInitialRevealCells, 'minesweeper.maxInitialRevealCells', safeCells * safeColumns, config.boardColumns * config.boardRows - 1);
+    }
     const availableMineCells = config.boardColumns * config.boardRows - safeCells * safeColumns;
     if (config.minesByRound.some((count) => count > availableMineCells)) {
       throw new Error('踩地雷的地雷數必須保留安全起點周圍空格');
@@ -389,6 +395,13 @@ function validateGameStructure(gameId, config) {
     config.cameraAzimuthDegrees.forEach((angle, index) => assertInteger(angle, `cube_count.cameraAzimuthDegrees[${index}]`, 0, 359));
   }
   if (gameId === 'map_view') {
+    if (config.questionMode !== undefined && config.questionMode !== 'object_views') throw new Error('map_view.questionMode 設定不支援');
+    if (config.questionMode === 'object_views' && (config.answerIncludesPositionAndHeading ||
+        config.choiceGridRect.y < 128 || config.confirmRect.y < 128 ||
+        (config.choiceGridRect.y < config.confirmRect.y + config.confirmRect.height &&
+         config.choiceGridRect.y + config.choiceGridRect.height > config.confirmRect.y))) {
+      throw new Error('三視圖物件選項與確認區不可重疊，且答案不是位置方向');
+    }
     if (config.choiceGridColumns * config.choiceGridRows !== FIXED_OPTION_COUNTS.get('map_view')) {
       throw new Error('地圖定位答題列欄數必須符合固定六選項');
     }
@@ -471,7 +484,7 @@ export function validateGameRules(rules) {
     for (const [field, [min, max]] of Object.entries(NUMBER_BOUNDS)) {
       if (Object.hasOwn(config, field)) assertInteger(config[field], `${gameId}.${field}`, min, max);
     }
-    if (Object.hasOwn(config, 'difficultyBands')) assertBands(gameId, config);
+    if (Object.hasOwn(config, 'difficultyBands') && !(gameId === 'map_view' && config.questionMode === 'object_views')) assertBands(gameId, config);
     if (Object.hasOwn(config, 'optionCount')) {
       const choiceCount = config.optionCount;
       if (choiceCount > 26) throw new Error(`${gameId} 選項數不可超過 26`);
@@ -490,6 +503,7 @@ export function getEditableRuleSettings(rules) {
   for (const [gameId, config] of Object.entries(rules.games)) {
     const settings = { enabled: config.enabled !== false };
     for (const field of EDITABLE_GAME_FIELDS) {
+      if (gameId === 'map_view' && config.questionMode === 'object_views' && ['difficultyBands', 'minimumDistinctVisibleClues'].includes(field)) continue;
       if (Object.hasOwn(config, field)) settings[field] = structuredClone(config[field]);
     }
     games[gameId] = settings;
@@ -515,7 +529,8 @@ export function applyEditableRuleSettings(rules, settings) {
         config.enabled = value;
         continue;
       }
-      if (!EDITABLE_GAME_FIELDS.has(field) || !Object.hasOwn(config, field)) {
+      if (!EDITABLE_GAME_FIELDS.has(field) || !Object.hasOwn(config, field) ||
+          (gameId === 'map_view' && config.questionMode === 'object_views' && ['difficultyBands', 'minimumDistinctVisibleClues'].includes(field))) {
         throw new Error(`${gameId}.${field} 不允許從後台修改`);
       }
       if (field === 'difficultyBands') {

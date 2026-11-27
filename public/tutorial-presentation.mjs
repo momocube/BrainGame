@@ -1,3 +1,5 @@
+import { generateObjectQuestion, objectOrthographicSvg, objectPerspectiveSvg } from './object-views.mjs';
+
 /** Group adjacent fixed menu regions into one shared tutorial per physical wall. */
 export function sharedTutorialWalls(zones) {
   const groups = new Map();
@@ -44,6 +46,14 @@ function sequence(step) {
   const colors=values.map(v=>step===0||!v||step===2&&v<=2?'#000':'#fff');
   return svg(rect(188,15,264,264,'#000','#000')+grid(labels,3,{x:194,y:21,size:86,colors})+text(320,330,step===0?'記住 1 → 2 → 3 → 4 → 5':step===1?'白格蓋住數字':'照順序點，從 1 開始',28)+(step===2?pointer(237,64):''));
 }
+let objectDemo;
+function objectViews(step) {
+  objectDemo ??= generateObjectQuestion(1, max => max - 1);
+  const model = objectDemo.object;
+  const graphic = step === 0 ? objectOrthographicSvg(model) : objectPerspectiveSvg(model);
+  return svg(`<svg x="80" y="0" width="480" height="320">${graphic}</svg>` +
+    (step === 2 ? confirm('選出物件 → 確定') : text(320,365,step === 0 ? '上方是上視圖，右方是右側視圖' : '比對輪廓、圓弧與斜角',25)));
+}
 function map(step) {
   if(step===0)return svg('<path d="M100 320 L240 160 L400 160 L540 320Z" fill="#203d59" stroke="#8eb4d1" stroke-width="3"/><path d="M180 250 L220 170 L260 250Z" fill="#42c9ff"/>'+rect(380,174,70,76,'#ffc84f')+text(320,365,'前方：左邊藍三角、右邊黃方塊',25));
   return svg(rect(160,20,320,290,'#17344c')+'<path d="M210 150 L240 80 L270 150Z" fill="#42c9ff"/>'+rect(370,80,60,70,'#ffc84f')+text(320,247,'A ↑',40,step===2?'#70e4ce':'#fff')+text(320,55,'B ↓',30)+(step===1?pointer(320,247):confirm('選 A → 確定')));
@@ -70,7 +80,9 @@ const stories={
   memory_sequence:{steps:['記住數字與位置','蓋牌後從 1 開始','依序點完全部數字'],draw:sequence},
   slitherlink:{steps:['看數字決定邊數','點邊畫線或打叉','連成一個封閉圈'],draw:slither}
 };
-export function illustratedTutorial(gameId) {
-  const story=stories[gameId];if(!story)throw new Error(`沒有圖解教學：${gameId}`);
+export function illustratedTutorial(gameId, config = {}) {
+  const story = gameId === 'map_view' && config.questionMode === 'object_views'
+    ? {steps:['看 L 型三視圖','比對六個立體物件','點選答案，按確定'],draw:objectViews} : stories[gameId];
+  if(!story)throw new Error(`沒有圖解教學：${gameId}`);
   return {steps:[...story.steps],frames:story.steps.map((label,index)=>({label,svg:story.draw?.(index)??null}))};
 }

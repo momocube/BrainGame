@@ -29,10 +29,12 @@ const tutorials = {
     schedule: `每輪 ${number(config, "playSeconds", 60)} 秒・共 ${number(config, "rounds", 10)} 輪`
   }),
   solid_puzzle: (config) => ({
-    goal: `從 ${number(config, "optionCount", 6)} 個方塊零件中，對照前、側、上三視圖，選出能補滿缺口的零件。`,
+    goal: `從 ${number(config, "optionCount", 6)} 個立體零件中，對照 L 型三視圖，選出能補滿缺口的零件。`,
     steps: [
       "在牆面點選 A–F；按確認前可以改選。",
-      "黃色格表示缺口的投影（包含遮住的缺口），側圖為右側；零件可以旋轉，不能鏡像或拆開。",
+      config.questionMode === 'remaining_solid_views'
+        ? "綠色整體輪廓是現有物件，不是缺口。對照正、上、右側三視圖，找出補回完整外框的零件；可旋轉，不能鏡像或拆開。"
+        : "黃色表示缺口投影；側圖為右側。零件可以旋轉，不能鏡像或拆開。",
       `答錯會清除選取並鎖答 ${number(config, "wrongAnswerLockSeconds", 10)} 秒；選項不會移除。`
     ],
     schedule: `每輪 ${number(config, "playSeconds", 30)} 秒・共 ${number(config, "rounds", 20)} 輪`
@@ -46,7 +48,15 @@ const tutorials = {
     ],
     schedule: `公共牌 ${number(config, "communityRevealSeconds", 0)} 秒・記憶 ${number(config, "memorySeconds", 20)} 秒・選牌 ${number(config, "selectionSeconds", 10)} 秒・揭曉 ${number(config, "revealCountdownSeconds", 3)} 秒・共 ${number(config, "rounds", 5)} 輪`
   }),
-  map_view: (config) => ({
+  map_view: (config) => config.questionMode === 'object_views' ? ({
+    goal: '觀察同一物件的正視圖、上視圖與右側視圖，從六個立體物件中找出正解。',
+    steps: [
+      '題目呈 L 型：正視圖在下方，上視圖在正上方，右側視圖在正右方。',
+      '六個選項正面相似，須一起比對上方和右側的輪廓與結構；朝向固定，不需旋轉。點選 A–F，再按上方確定。',
+      `答錯會清除選取並鎖答 ${number(config, 'wrongAnswerLockSeconds', 10)} 秒；不會刪除選項。`
+    ],
+    schedule: `每輪 ${number(config, 'playSeconds', 30)} 秒・共 ${number(config, 'rounds', 20)} 輪`
+  }) : ({
     goal: "對照地板第一人稱景象與牆面平面圖，找出拍攝者的位置和面向。",
     steps: [
       `選擇 ${number(config, "optionCount", 6)} 個候選之一；答案包含位置與方向，兩者都要正確。`,

@@ -1,5 +1,5 @@
 {
-  "rulesVersion": "1.0.17",
+  "rulesVersion": "1.0.19",
   "status": "prototype_in_progress",
   "updatedAt": "2026-11-26",
   "common": {
@@ -144,7 +144,8 @@
         "y": 128,
         "width": 512,
         "height": 64
-      }
+      },
+      "maxInitialRevealCells": 14
     },
     "zero_sum_grid": {
       "displayName": "數字方格",
@@ -238,6 +239,7 @@
       ]
     },
     "solid_puzzle": {
+      "questionMode": "remaining_solid_views",
       "displayName": "立體拼圖",
       "rounds": 20,
       "playSeconds": 30,
@@ -363,15 +365,15 @@
       },
       "choiceGridRect": {
         "x": 0,
-        "y": 384,
+        "y": 192,
         "width": 640,
-        "height": 192
+        "height": 448
       },
-      "choiceGridColumns": 3,
-      "choiceGridRows": 2,
+      "choiceGridColumns": 2,
+      "choiceGridRows": 3,
       "confirmRect": {
         "x": 0,
-        "y": 576,
+        "y": 128,
         "width": 640,
         "height": 64
       },
@@ -379,7 +381,7 @@
       "wrongAnswerLockSeconds": 10,
       "clearSelectionOnWrongAnswer": true,
       "removeWrongOptions": false,
-      "answerIncludesPositionAndHeading": true,
+      "answerIncludesPositionAndHeading": false,
       "headings": [
         "north",
         "east",
@@ -414,7 +416,8 @@
           "mapRows": 11,
           "landmarkTypes": 5
         }
-      ]
+      ],
+      "questionMode": "object_views"
     },
     "memory_sequence": {
       "displayName": "數字速記",

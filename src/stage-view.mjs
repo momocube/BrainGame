@@ -89,7 +89,7 @@ export function createStageSnapshot(engine, rules, zones) {
     publicQuestion = { size: question.size, maxHeight: question.maxHeight, heights: [...question.heights] };
   } else if (gameId === 'solid_puzzle') {
     publicQuestion = {
-      volume: question.volume, target: [...question.target], missing: question.missing,
+      kind: question.kind, volume: question.volume, target: [...question.target], missing: question.missing,
       choices: question.choices.map(({ id, cells }) => ({ id, cells }))
     };
   } else if (gameId === 'memory_poker') {
@@ -102,7 +102,10 @@ export function createStageSnapshot(engine, rules, zones) {
       community: (config.communityCardsVisibleDuringMemory || elapsedMs >= pokerTiming(config).memoryEnd || resultPhase) ? question.community.map((card) => card.label) : null
     };
   } else if (gameId === 'map_view') {
-    publicQuestion = {
+    publicQuestion = question.kind === 'object_views' ? {
+      kind: question.kind, object: structuredClone(question.object),
+      choices: question.choices.map(({ id, object }) => ({ id, object: structuredClone(object) }))
+    } : {
       size: question.size, grid: question.grid, landmarks: question.landmarks,
       firstPersonView: question.firstPersonView,
       choices: question.choices.map(({ id, x, y, heading }) => ({ id, x, y, heading }))

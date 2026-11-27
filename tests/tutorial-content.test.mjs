@@ -27,6 +27,9 @@ test("numeric and choice-game tutorials reflect editable penalties and round len
 
   const puzzle = getGameTutorial("solid_puzzle", { ...rules.games.solid_puzzle, wrongAnswerLockSeconds: 12 });
   assert.match(puzzle.steps[2], /12 秒/);
+  assert.match(puzzle.steps[1], /現有物件，不是缺口/);
+  const legacy = { ...rules.games.solid_puzzle }; delete legacy.questionMode;
+  assert.match(getGameTutorial('solid_puzzle', legacy).steps[1], /黃色表示缺口/);
 
   const mines = getGameTutorial("minesweeper", { ...rules.games.minesweeper, penaltySecondsPerDistinctMine: 19 });
   assert.match(mines.steps[2], /19 秒/);
@@ -77,4 +80,17 @@ test('all eight games have three concise illustrated tutorial steps', () => {
     if(!['cube_count','solid_puzzle'].includes(id)) assert.ok(story.frames.every(f=>f.svg.includes('<svg') && f.svg.includes('</svg>')));
   }
   assert.throws(()=>illustratedTutorial('unknown_game'), /沒有圖解教學/);
+});
+
+test('new object-view tutorial explains L layout and solid choices instead of map coordinates', () => {
+  const config=rules.games.map_view;
+  const guide=getGameTutorial('map_view',config);
+  assert.match(guide.goal,/六個立體物件/);
+  assert.match(guide.steps.join(' '),/L 型/);
+  assert.match(guide.steps.join(' '),/上方確定/);
+  const story=illustratedTutorial('map_view',config);
+  assert.ok(story.frames.every(f=>f.svg.includes('<svg')));
+  assert.match(story.steps[0],/三視圖/);
+  const old=structuredClone(config);delete old.questionMode;
+  assert.match(getGameTutorial('map_view',old).goal,/拍攝者/);
 });

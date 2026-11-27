@@ -43,13 +43,13 @@ test('memory sequence distinguishes empty cells and wrong-order repeats while ac
   assert.throws(() => validateGameRules(malformed), /emptyCellCountsAsError/);
 });
 
-test('map view wall layout places the six answer keys beneath the map and above confirmation', () => {
+test('object-view wall uses six large solid options below the confirmation bar', () => {
   const map = defaults.games.map_view;
-  assert.deepEqual(map.mapPanelRect, { x: 0, y: 128, width: 640, height: 256 });
-  assert.deepEqual(map.choiceGridRect, { x: 0, y: 384, width: 640, height: 192 });
+  assert.equal(map.questionMode, 'object_views');
+  assert.deepEqual(map.choiceGridRect, { x: 0, y: 192, width: 640, height: 448 });
   assert.equal(map.choiceGridColumns * map.choiceGridRows, map.optionCount);
-  assert.equal(map.choiceGridRect.y, map.mapPanelRect.y + map.mapPanelRect.height);
-  assert.equal(map.confirmRect.y, map.choiceGridRect.y + map.choiceGridRect.height);
+  assert.equal(map.choiceGridRect.y, map.confirmRect.y + map.confirmRect.height);
+  assert.equal(map.choiceGridRect.y + map.choiceGridRect.height, 640);
 });
 
 test('editable settings change only supported fields and default every game to enabled', () => {
@@ -120,7 +120,7 @@ test('round counts stay aligned with per-round arrays and difficulty bands', () 
 test('game rules enforce playable bounds for map and mine settings', () => {
   const noClues = getEditableRuleSettings(defaults);
   noClues.games.map_view.minimumDistinctVisibleClues = 4;
-  assert.throws(() => applyEditableRuleSettings(defaults, noClues), /地圖地標數不可少於/);
+  assert.throws(() => applyEditableRuleSettings(defaults, noClues), /不允許從後台修改/);
 
   const tooManyMines = getEditableRuleSettings(defaults);
   tooManyMines.games.minesweeper.minesByRound[0] = 80;
@@ -216,4 +216,20 @@ test('legacy 3+2 poker snapshots remain valid for recovery while new defaults us
   assert.equal(defaults.games.memory_poker.selectedCardsRequired, 3);
   const legacy = changedRules(r => { r.games.memory_poker.communityCards=3; r.games.memory_poker.selectedCardsRequired=2; });
   assert.equal(validateGameRules(legacy).games.memory_poker.selectedCardsRequired, 2);
+});
+
+test('mine opening cap rejects impossible and malformed limits but permits legacy snapshots', () => {
+  for (const cap of [8, -1, 14.5, '14']) {
+    const r=structuredClone(defaults);r.games.minesweeper.maxInitialRevealCells=cap;
+    assert.throws(()=>validateGameRules(r),/maxInitialRevealCells/);
+  }
+  const legacy=structuredClone(defaults);delete legacy.games.minesweeper.maxInitialRevealCells;
+  assert.deepEqual(validateGameRules(legacy),legacy);
+});
+test('object mode hides obsolete map settings and rejects overlapping answer controls', () => {
+  const settings=getEditableRuleSettings(defaults).games.map_view;
+  assert.equal(settings.difficultyBands,undefined);
+  assert.equal(settings.minimumDistinctVisibleClues,undefined);
+  const r=structuredClone(defaults);r.games.map_view.choiceGridRect.y=128;
+  assert.throws(()=>validateGameRules(r),/不可重疊/);
 });

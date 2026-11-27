@@ -4,6 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { GameEngine, GAME_IDS, evaluateFiveCardHand, evaluateBestPokerHand, preflightGameQuestions } from '../src/game-engine.mjs';
+import { objectProjectionSignature } from '../public/object-views.mjs';
 import { cubeColumnsAreReadable } from '../src/cube-visibility.mjs';
 import { createStageSnapshot } from '../src/stage-view.mjs';
 import { handleMouseInput } from '../src/mouse-input.mjs';
@@ -23,8 +24,8 @@ function startReadySession(engine) {
   engine.startSession();
 }
 
-function createEngine(gameId, { participants = ['P1'], round = 1, seed } = {}) {
-  const engine = new GameEngine({ rules, zones, onSave() {}, ...(seed === undefined ? {} : { seedFactory: () => seed }) });
+function createEngine(gameId, { participants = ['P1'], round = 1, seed, gameRules = rules } = {}) {
+  const engine = new GameEngine({ rules: gameRules, zones, onSave() {}, ...(seed === undefined ? {} : { seedFactory: () => seed }) });
   startReadySession(engine);
   for (const id of participants) engine.join(id);
   engine.selectGame(gameId);
@@ -158,7 +159,7 @@ test('a round seed reproduces every game question and per-player variant', () =>
 
     assert.equal(first.seed, seed, `${gameId} records its seed`);
     assert.equal(first.rngAlgorithm, 'mulberry32-v1');
-    assert.equal(first.generatorVersion, '1.0.3');
+    assert.equal(first.generatorVersion, '1.0.5');
     assert.equal(first.rulesVersion, rules.rulesVersion);
     assert.equal(first.questionId, replay.questionId);
     assert.deepEqual(first.question, replay.question, `${gameId} question regenerates from its seed`);
@@ -261,8 +262,9 @@ test('difficulty boundaries generate valid questions for every round band', () =
       } else if (gameId === 'map_view') {
         assert.equal(question.choices.length, rules.games.map_view.optionCount);
         assert.equal(question.choices.filter((choice) => choice.correct).length, 1);
-        assert.equal(new Set(question.choices.map((choice) => choice.signature)).size, question.choices.length);
-        assert.ok(question.firstPersonView.length >= rules.games.map_view.minimumDistinctVisibleClues);
+        assert.equal(question.kind, 'object_views');
+        assert.equal(new Set(question.choices.map((choice) => objectProjectionSignature(choice.object))).size, question.choices.length);
+        assert.equal(objectProjectionSignature(question.object), objectProjectionSignature(question.choices.find(c => c.id === question.correctId).object));
       } else if (gameId === 'memory_sequence') {
         assert.equal(question.count, rules.games.memory_sequence.numberCountByRound[round - 1]);
         assert.equal(question.memorySeconds, rules.games.memory_sequence.memorySecondsByRound[round - 1]);
@@ -2149,12 +2151,159 @@ test('slitherlink cannot undo after completion or deadline', () => {
 });
 
 
-test('new solid puzzles avoid distractors with identical orthographic views', async () => {
+test('legacy solid puzzles avoid distractors with identical orthographic views', async () => {
   const {orthographicSignature} = await import('../public/solid-views.mjs');
+  const gameRules = structuredClone(rules);
+  delete gameRules.games.solid_puzzle.questionMode;
   for (const round of [1,7,14,20]) for (const seed of [1,2,3,4,5]) {
-    const engine = createEngine('solid_puzzle', {round,seed});
+    const engine = createEngine('solid_puzzle', {round,seed,gameRules});
     const q = engine.state.currentRound.question;
     const target = orthographicSignature(q.missing);
     assert.equal(q.choices.filter(c => orthographicSignature(c.cells) === target).length, 1);
   }
+});
+
+// Independent proper-rotation enumeration: choose perpendicular x/y axes,
+// then their cross product fixes z (reflections are deliberately excluded).
+function solidTestRotations(cells) {
+  const axes = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  const dot = (a,b) => a.reduce((sum,n,i) => sum+n*b[i],0);
+  const rotations = [];
+  for (const x of axes) for (const y of axes) {
+    if (dot(x,y)) continue;
+    const z = [x[1]*y[2]-x[2]*y[1], x[2]*y[0]-x[0]*y[2], x[0]*y[1]-x[1]*y[0]];
+    const points = cells.map(cell => [dot(cell,x),dot(cell,y),dot(cell,z)]);
+    const min = [0,1,2].map(axis => Math.min(...points.map(cell => cell[axis])));
+    rotations.push(points.map(cell => cell.map((n,axis) => n-min[axis])));
+  }
+  assert.equal(rotations.length,24);
+  return [...new Map(rotations.map(points => [JSON.stringify(points.toSorted((a,b) => a[0]-b[0] || a[1]-b[1] || a[2]-b[2])),points])).values()];
+}
+
+function solidTestConnected(cells) {
+  const reached = [cells[0]], rest = cells.slice(1);
+  for (let index=0; index<reached.length; index++) {
+    for (let i=rest.length-1; i>=0; i--) {
+      if (rest[i].reduce((sum,n,axis) => sum+Math.abs(n-reached[index][axis]),0) === 1) reached.push(...rest.splice(i,1));
+    }
+  }
+  return cells.length > 0 && !rest.length;
+}
+
+function solidTestSignature(cells) {
+  return [[0,1],[0,2],[1,2]].map(axes => [...new Set(cells.map(c => axes.map(axis => c[axis]).join(',')))].sort().join(';')).join('|');
+}
+
+function solidTestMatchingIds(q, remainingSolidCells) {
+  const wanted = solidTestSignature(remainingSolidCells(q.target,q.missing));
+  return q.choices.filter(choice => solidTestRotations(choice.cells).some(rotated => {
+    const size = [0,1,2].map(axis => Math.max(...rotated.map(c => c[axis]))+1);
+    for (let x=0; x<=q.target[0]-size[0]; x++) for (let y=0; y<=q.target[1]-size[1]; y++) for (let z=0; z<=q.target[2]-size[2]; z++) {
+      const placed = rotated.map(c => [c[0]+x,c[1]+y,c[2]+z]);
+      if (solidTestSignature(remainingSolidCells(q.target,placed)) === wanted) return true;
+    }
+    return false;
+  })).map(choice => choice.id);
+}
+
+test('remaining-solid questions expose every missing voxel and have one solution over all rotations/translations', async () => {
+  const {remainingSolidCells} = await import('../public/solid-views.mjs');
+  const gameRules = structuredClone(rules);
+  gameRules.games.solid_puzzle.questionMode = 'remaining_solid_views';
+  const volumes = new Set();
+  for (const round of [1,7,15,20]) for (let seed=1; seed<=12; seed++) {
+    const q = createEngine('solid_puzzle',{round,seed,gameRules}).state.currentRound.question;
+    assert.equal(q.kind,'remaining_solid_views');
+    assert.equal(q.choices.length,6);
+    volumes.add(q.volume);
+    const remaining = remainingSolidCells(q.target,q.missing);
+    assert.equal(remaining.length+q.volume,q.target.reduce((a,b) => a*b,1));
+    assert.ok(solidTestConnected(remaining),'remaining solid must stay connected');
+    assert.ok(solidTestConnected(q.missing),'piece must stay connected');
+    for (const cell of q.missing) {
+      assert.ok([0,1,2].some(axis => !remaining.some(c => c.every((n,i) => i===axis || n===cell[i]))), 'a whole empty projection ray must expose each missing voxel');
+    }
+    assert.deepEqual(solidTestMatchingIds(q,remainingSolidCells),[q.correctId]);
+  }
+  assert.deepEqual([...volumes].sort(),[4,5,6]);
+  const report = preflightGameQuestions(gameRules,{gameIds:['solid_puzzle'],seedFactory:()=>12345});
+  assert.equal(report.passed,true,JSON.stringify(report.games));
+  assert.equal(report.checkedRounds,20);
+});
+
+test('remaining-solid preflight rejects impossible visible holes instead of generating an occluded question', () => {
+  const gameRules = structuredClone(rules);
+  gameRules.games.solid_puzzle.questionMode = 'remaining_solid_views';
+  gameRules.games.solid_puzzle.rounds = 1;
+  gameRules.games.solid_puzzle.difficultyBands = [{firstRound:1,lastRound:1,targetDimensions:[3,3,3],missingCubesMin:4,missingCubesMax:4}];
+  const result = preflightGameQuestions(gameRules,{gameIds:['solid_puzzle'],seedFactory:()=>1});
+  assert.equal(result.passed,false);
+  assert.match(result.games[0].failures[0].message,/無法產生可由現有物件三視圖推斷/);
+});
+
+test('remaining-solid matching detects occluded ambiguity and permits translated rotated pieces', async () => {
+  const {remainingSolidCells} = await import('../public/solid-views.mjs');
+  const hidden = { target:[3,3,3], missing:[[0,0,0],[1,0,0],[0,1,0],[0,0,1]], choices:[
+    {id:'A',cells:[[0,0,0],[1,0,0],[0,1,0],[0,0,1]]},
+    {id:'B',cells:[[0,0,0],[1,0,0],[1,1,0],[1,1,1]]}
+  ]};
+  assert.deepEqual(solidTestMatchingIds(hidden,remainingSolidCells),['A','B']);
+  const translated = {target:[3,3,2],missing:[[2,1,0],[2,1,1],[2,2,0],[2,2,1]],choices:[
+    {id:'A',cells:[[0,0,0],[1,0,0],[0,1,0],[1,1,0]]},
+    {id:'B',cells:[[0,0,0],[1,0,0],[2,0,0],[2,1,0]]}
+  ]};
+  assert.deepEqual(solidTestMatchingIds(translated,remainingSolidCells),['A']);
+});
+
+test('saved legacy solid sessions retain old generation rules when replaying interrupted rounds', () => {
+  const legacyRules = structuredClone(rules);
+  delete legacyRules.games.solid_puzzle.questionMode;
+  const old = createEngine('solid_puzzle',{seed:22,gameRules:legacyRules});
+  const newRules = structuredClone(rules);
+  newRules.games.solid_puzzle.questionMode = 'remaining_solid_views';
+  const restored = new GameEngine({rules:newRules,zones,initialState:structuredClone(old.state),onSave(){}});
+  assert.equal(restored.rules.games.solid_puzzle.questionMode,undefined);
+  assert.equal(restored.state.phase,'tutorial');
+  restored.startAfterTutorial();
+  advance(restored,3_000);
+  assert.equal(restored.state.currentRound.question.kind,undefined);
+  restored.restartRound();
+  assert.equal(restored.state.currentRound.question.kind,undefined);
+});
+
+test('mine openings are bounded across all rounds without truncating flood reveal', () => {
+  for (let round=1; round<=5; round++) for (let seed=1; seed<=30; seed++) {
+    const engine=createEngine('minesweeper',{round,seed});
+    const q=engine.state.currentRound.question;
+    engine.act('P1',{type:'reveal',index:q.anchor});
+    const p=engine.state.currentRound.players.P1;
+    assert.ok(p.revealed.length >= 9);
+    assert.ok(p.revealed.length <= rules.games.minesweeper.maxInitialRevealCells, 'opening too large');
+    assert.equal(p.hits.length,0);
+    assert.equal(engine.state.phase,'playing');
+  }
+});
+test('object-view snapshots hide answer flags and the six choices accept confirmation', () => {
+  const engine=createEngine('map_view',{seed:83});
+  const q=engine.state.currentRound.question;
+  const view=createStageSnapshot(engine,rules,zones);
+  assert.equal(view.currentRound.question.kind,'object_views');
+  assert.equal(view.currentRound.question.correctId,undefined);
+  assert.ok(view.currentRound.question.choices.every(c=>c.correct===undefined));
+  engine.act('P1',{type:'select',id:q.correctId});
+  engine.act('P1',{type:'confirm'});
+  assert.equal(engine.state.phase,'round_results');
+  assert.equal(engine.state.results[0].answer.correctId,q.correctId);
+});
+test('legacy map snapshots retain old geometry and generation mode', () => {
+  const legacy=structuredClone(rules);
+  delete legacy.games.map_view.questionMode;
+  Object.assign(legacy.games.map_view,{answerIncludesPositionAndHeading:true,choiceGridColumns:3,choiceGridRows:2,
+    choiceGridRect:{x:0,y:384,width:640,height:192},confirmRect:{x:0,y:576,width:640,height:64}});
+  const engine=new GameEngine({rules:legacy,zones,onSave(){},seedFactory:()=>51});
+  startReadySession(engine);engine.join('P1');engine.selectGame('map_view');engine.confirmGameSelection();engine.startAfterTutorial();advance(engine,3000);
+  const view=createStageSnapshot(engine,legacy,zones);
+  assert.ok(view.currentRound.question.firstPersonView.length>=2);
+  assert.equal(view.currentRound.question.kind,undefined);
+  assert.equal(view.currentRound.question.choices[0].object,undefined);
 });

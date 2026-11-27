@@ -1,4 +1,6 @@
-import { orthographicSvg } from './solid-views.mjs';
+import { objectOrthographicSvg, objectPerspectiveSvg } from './object-views.mjs';
+import { orthographicSvg, remainingSolidCells } from './solid-views.mjs';
+import { countedScore, createFeedbackTimeline, confettiParticles } from './player-feedback.mjs';
 import { createIdleParticles } from './idle-scene.mjs';
 import { pokerTiming, pokerStage } from './poker-timing.mjs';
 import { CAD_SCENE, PROJECTION_CANVAS, calculateProjectionFit } from './projection-layout.mjs';
@@ -24,10 +26,21 @@ const gameNames = {
   slitherlink: '數迴'
 };
 const GAME_ICONS = { minesweeper: '01_minesweeper', zero_sum_grid: '02_zero_sum_grid', cube_count: '03_count_cubes', solid_puzzle: '04_spatial_puzzle', memory_poker: '05_memory_poker', map_view: '06_map_position', memory_sequence: '07_number_memory', slitherlink: '08_slitherlink' };
+// Share deterministic object SVGs across up to eight player walls; bounded across rounds.
+const objectSvgCache = new Map();
+function objectSvg(object, perspective = false) {
+  const key = `${perspective ? '3d' : 'ortho'}:${JSON.stringify(object)}`;
+  if (!objectSvgCache.has(key)) {
+    if (objectSvgCache.size >= 64) objectSvgCache.clear();
+    objectSvgCache.set(key, perspective ? objectPerspectiveSvg(object) : objectOrthographicSvg(object));
+  }
+  return objectSvgCache.get(key);
+}
 let state;
 let lastRenderedStructureKey = null;
 const lastSequenceWrongCount = new Map();
 const mineErrorFeedback = new Map();
+const feedbackTimeline = createFeedbackTimeline();
 const floor = $('#floor');
 let tutorialProgress = { active: false, heldMs: 0, requiredMs: 1000, receivedAt: 0 };
 
@@ -44,6 +57,7 @@ function paintTutorialProgress() {
 }
 function animateTutorialProgress() {
   paintTutorialProgress();
+  paintScoreCounters();
   requestAnimationFrame(animateTutorialProgress);
 }
 requestAnimationFrame(animateTutorialProgress);
@@ -81,6 +95,13 @@ function sharedMenuTile(option, data, split) {
     const glow = el('div', 'shared-game-icon-glow');
     const icon = el('img', 'shared-game-icon'); icon.src = `/icons/${icons[option.id]}.png`; icon.alt = '';
     glow.append(icon); tile.append(glow);
+  } else if (option.id === 'random') {
+    const glow = el('div', 'shared-game-icon-glow random-icon-collage');
+    glow.setAttribute('aria-label', '各款遊戲圖示組合');
+    for (const file of Object.values(GAME_ICONS)) {
+      const icon = el('img', 'random-game-mini-icon'); icon.src = '/icons/' + file + '.png'; icon.alt = ''; glow.append(icon);
+    }
+    tile.append(glow);
   }
   tile.append(el('strong', '', option.name));
   tile.append(el('small', '', option.id === 'random' ? '全體共同抽選一款遊戲' : `全體共同遊玩・${option.rounds} 輪`));
@@ -107,7 +128,7 @@ function renderSharedTutorialWall(wall, data) {
   const header = el('div', 'tutorial-wall-header');
   const icon = el('img', 'tutorial-wall-icon'); icon.src = `/icons/${GAME_ICONS[data.selectedGame]}.png`; icon.alt = '';
   header.append(icon, el('strong', '', gameNames[data.selectedGame]), el('span', '', '一起看示範'));
-  const story = illustratedTutorial(data.selectedGame);
+  const story = illustratedTutorial(data.selectedGame, data.gameRules?.games?.[data.selectedGame]);
   const demo = el('div', 'tutorial-demo');
   const frames = el('div', 'tutorial-frames');
   const steps = el('ol', 'tutorial-visual-steps');
@@ -116,7 +137,7 @@ function renderSharedTutorialWall(wall, data) {
     slide.style.setProperty('--slide-delay', `${index === 0 ? 0 : (index - 3) * 3}s`);
     slide.setAttribute('aria-label', frame.label);
     if (frame.svg) slide.innerHTML = frame.svg;
-    else slide.append(renderTutorialSolid(data.selectedGame, index));
+    else slide.append(renderTutorialSolid(data.selectedGame, index, data.gameRules?.games?.[data.selectedGame]));
     frames.append(slide);
     const step = el('li', 'tutorial-visual-step');
     step.style.setProperty('--slide-delay', `${index === 0 ? 0 : (index - 3) * 3}s`);
@@ -128,7 +149,7 @@ function renderSharedTutorialWall(wall, data) {
   node.append(content);
   return node;
 }
-function renderTutorialSolid(gameId, step) {
+function renderTutorialSolid(gameId, step, config = {}) {
   const box = el('div', 'tutorial-solid-demo');
   if (gameId === 'cube_count') {
     box.append(createIsometricSvg([[0,0,0],[1,0,0],[0,0,1]], {
@@ -137,12 +158,14 @@ function renderTutorialSolid(gameId, step) {
     box.append(el('div', step === 2 ? 'tutorial-demo-confirm' : 'tutorial-demo-caption',
       ['上下層都要數', '底層 2 ＋ 上層 1 ＝ 3', '輸入 3 → 確定'][step]));
   } else {
-    const missing = [[0,0,1],[1,0,1],[0,1,1],[0,0,2]];
+    const missing = [[0,0,1],[0,1,1],[0,0,2],[0,1,2]];
     const views = el('div', 'tutorial-orthographic');
-    views.innerHTML = orthographicSvg(missing, step === 0 ? { bounds: [2,2,3], target: true } : {});
+    const remaining = config.questionMode === 'remaining_solid_views';
+    if (step === 0) views.innerHTML = orthographicSvg(remaining ? remainingSolidCells([2,2,3], missing) : missing, { bounds: [2,2,3], target: !remaining });
+    else views.append(renderShapeCells(missing));
     box.append(views);
     box.append(el('div', step === 2 ? 'tutorial-demo-confirm' : 'tutorial-demo-caption',
-      ['前、側、上：黃色是缺口投影', '找出相同形狀的零件', '選取零件 → 確定'][step]));
+      [remaining ? '三視圖顯示現有物件，找出缺少部分' : '黃色是缺口投影', '找出能補回完整外框的零件', '選取零件 → 確定'][step]));
   }
   return box;
 }
@@ -272,7 +295,8 @@ function renderZone(zone, view, data) {
   const isDone = panel.done || panel.eliminated;
   if (isDone) {
     body.classList.add('zone-body-centered');
-    body.append(el('div', 'floor-title', panel.eliminated ? '本輪結束' : '正確'), el('div', 'compact-info', '等待其他玩家'));
+    body.append(el('div', 'floor-title', panel.eliminated ? '本輪結束' : '答對了!'), el('div', 'compact-info', '等待其他玩家'));
+    if (!panel.eliminated) appendCelebration(body, zone.id);
     if (flashSequenceError && panel.eliminated) {
       const flash = el('div', 'sequence-wrong-flash sequence-wrong-flash-zone');
       flash.setAttribute('aria-hidden', 'true');
@@ -407,13 +431,17 @@ function renderKeypad(body, layout = {}, entry = '', lockRemainingMs = 0) {
 
 function renderChoices(body, choices, selection, kind, choiceOrder = null, config = {}) {
   const grid = el('div', 'choice-grid');
+  grid.style.gridTemplateColumns = `repeat(${config.choiceGridColumns ?? 2}, minmax(0, 1fr))`;
+  grid.style.gridTemplateRows = `repeat(${config.choiceGridRows ?? 3}, minmax(0, 1fr))`;
   const choicesById = new Map(choices.map((item) => [item.id, item]));
   const orderedChoices = choiceOrder?.length === choices.length
     ? choiceOrder.map((id) => choicesById.get(id)).filter(Boolean) : choices;
   for (const item of orderedChoices.slice(0, 6)) {
     const tile = el('div', `choice-tile${selection === item.id ? ' selected' : ''}`);
     tile.append(el('strong', '', item.id));
-    if (kind === 'map') tile.append(el('small', '', `${item.heading}・${item.x + 1},${item.y + 1}`));
+    if (kind === 'object') {
+      const model = el('div', 'piece-svg object-piece'); model.innerHTML = objectSvg(item.object, true); tile.append(model);
+    } else if (kind === 'map') tile.append(el('small', '', `${item.heading}・${item.x + 1},${item.y + 1}`));
     else tile.append(renderShapeCells(item.cells ?? []));
     grid.append(tile);
   }
@@ -427,6 +455,7 @@ function renderChoices(body, choices, selection, kind, choiceOrder = null, confi
 }
 
 function renderMapPlayer(body, q = {}, selection = null, config = {}) {
+  if (q.kind === 'object_views') { renderChoices(body, q.choices ?? [], selection, 'object', null, config); return; }
   const mapHeight = config.mapPanelRect?.height ?? 256;
   const answerRect = config.choiceGridRect ?? { height: 192 };
   const columns = config.choiceGridColumns ?? 3, rows = config.choiceGridRows ?? 2;
@@ -454,9 +483,11 @@ function renderMapPlayer(body, q = {}, selection = null, config = {}) {
 }
 
 function renderShapeCells(cells) {
-  const view = el('div', 'piece-svg orthographic-piece');
-  view.innerHTML = orthographicSvg(cells);
-  return view;
+  return createIsometricSvg(cells, {
+    azimuthDegrees: -55, elevationDegrees: 30,
+    viewWidth: 320, viewHeight: 180, margin: 12,
+    className: 'piece-svg', edgeWidth: 1.5, label: '立體方塊零件'
+  });
 }
 
 function renderPokerZone(body, panel, q, elapsedMs, config) {
@@ -514,35 +545,47 @@ function renderSequenceZone(body, sequence = {}, round, forceReveal = false, fla
   body.append(board);
 }
 
-function renderZoneResult(header, body, panel, data) {
-  const resultRow = data.results?.[0]?.rows?.find((result) => result.zoneId === panel.zoneId);
-  header.parentElement.classList.add('player-results-content');
-  const rankLabel = resultRow?.rank ? `第 ${resultRow.rank} 名` : '未完成';
-  header.append(el('div', 'zone-result-heading', `${data.results?.[0]?.gameName ?? '本輪結算'}・${rankLabel}`),
-    resultScore(resultRow?.score ?? 0, resultRow?.rank, true));
-  if (data.currentRound?.gameId === 'memory_sequence' && panel.sequence) {
-    const wrongCount = panel.sequence.wrongCount ?? 0;
-    const review = !resultRow?.completed || wrongCount > 0;
-    body.classList.add(review ? 'sequence-result-review' : 'sequence-result-clean');
-    header.classList.add('sequence-result-header');
-    header.querySelector('.zone-result-heading').textContent = `公布答案・第 ${data.currentRound.round} 輪・${rankLabel}`;
-    const status = resultRow?.completed ? '已完成' : '未完成';
-    header.append(el('div', 'zone-result-detail', `${status}${wrongCount ? `・答錯 ${wrongCount} 次` : ''}`));
-    renderSequenceZone(body, panel.sequence, data.currentRound, true);
-    return;
+function paintScoreCounters() {
+  for (const node of document.querySelectorAll('[data-score-from]')) {
+    const value = countedScore(Number(node.dataset.scoreFrom), Number(node.dataset.scoreTo), performance.now() - Number(node.dataset.scoreStarted));
+    setTextIfChanged(node, String(value));
   }
-  header.append(el('div', 'zone-result-detail', `本輪加分・累積 ${(panel.score ?? 0).toFixed(1)} 分`));
-  if (panel.hand) {
-    body.classList.add('zone-body-centered');
-    body.append(el('div', 'floor-title', panel.hand.name), el('div', 'compact-info', panel.hand.labels?.join('　') ?? ''));
-  } else if (data.currentRound?.gameId === 'minesweeper') {
-    renderMineZone(body, panel.mine, data.currentRound.question, data.gameRules.games.minesweeper, data.gameRules.common.layout);
-  } else if (data.currentRound?.gameId === 'slitherlink') {
-    const q = data.currentRound.question ?? {};
-    renderSlitherlinkZone(body, panel.slither, q, data.gameRules?.games?.slitherlink ?? {}, q.solution ?? null);
-  } else {
-    body.classList.add('zone-body-centered');
-    body.append(el('div', 'compact-info', `累積 ${(panel.score ?? 0).toFixed(1)} 分`));
+}
+
+function appendCelebration(body, zoneId) {
+  const started = feedbackTimeline.start('success:' + zoneId, performance.now());
+  const elapsed = performance.now() - started;
+  if (elapsed >= 2200 || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const burst = el('div', 'answer-confetti');
+  burst.setAttribute('aria-hidden', 'true');
+  for (const particle of confettiParticles()) {
+    const piece = el('i', 'confetti-piece');
+    piece.style.cssText = '--dx:' + particle.x + 'px;--dy:' + particle.y + 'px;--spin:' + particle.rotation + 'deg;background:' + particle.color + ';animation-delay:' + (particle.delay - elapsed) + 'ms';
+    burst.append(piece);
+  }
+  body.append(burst);
+}
+
+function renderZoneResult(header, body, panel, data) {
+  const resultRow = data.results?.[0]?.rows?.find(result => result.zoneId === panel.zoneId);
+  const added = resultRow?.score ?? 0;
+  const total = panel.score ?? 0;
+  header.parentElement.classList.add('player-results-content');
+  const rankLabel = resultRow?.rank ? '第 ' + resultRow.rank + ' 名' : '未完成';
+  header.append(el('div', 'zone-result-heading', (data.results?.[0]?.gameName ?? '本輪結算') + '・' + rankLabel),
+    resultScore(added, resultRow?.rank, true), el('div', 'zone-result-detail', '本題得分'));
+  body.classList.add('player-total-panel');
+  const counter = resultScore(total);
+  counter.classList.add('player-total-score');
+  counter.dataset.scoreFrom = String(Math.max(0, total - added));
+  counter.dataset.scoreTo = String(total);
+  counter.dataset.scoreStarted = String(feedbackTimeline.start('score:' + panel.zoneId, performance.now()));
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) counter.dataset.scoreStarted = String(performance.now() - 1600);
+  counter.textContent = String(countedScore(Number(counter.dataset.scoreFrom), total, performance.now() - Number(counter.dataset.scoreStarted)));
+  body.append(el('div', 'player-total-label', '積分'), counter);
+  if (resultRow?.completed && data.currentRound?.gameId !== 'memory_poker') {
+    body.append(el('div', 'result-success-label', '答對了!'));
+    appendCelebration(body, panel.zoneId);
   }
 }
 
@@ -732,7 +775,7 @@ function renderPlayerProgress(data, target) {
   grid.style.gridTemplateColumns = `repeat(${scoreboardColumnCount(participantIds.length)}, minmax(0, 1fr))`;
   for (const zoneId of participantIds) {
     const player = data.playerViews?.[zoneId] ?? {};
-    const status = player.eliminated ? '本輪淘汰' : player.done ? '正確' : '進行中';
+    const status = player.eliminated ? '本輪淘汰' : player.done ? '答對了!' : '進行中';
     const item = el('div', 'result-person');
     item.append(el('strong', '', `${zoneId}・${status}`));
     item.append(el('small', '', `累積 ${(player.score ?? 0).toFixed(1)} 分${player.error ? `・${player.error}` : ''}`));
@@ -746,7 +789,7 @@ function renderRoundStandings(data, target) {
   const result = data.results?.[0];
   const wrap = el('div', 'floor-stack scoreboard-screen');
   wrap.append(el('div', 'floor-title', `${result?.gameName ?? ''}・第 ${result?.round ?? ''} 輪結算`));
-  wrap.append(el('div', 'floor-subtitle', '答題區顯示本輪解答；以下為名次與加分'));
+  wrap.append(el('div', 'floor-subtitle', '個人區顯示本題得分與積分；以下為名次與加分'));
   const grid = el('div', 'result-grid scoreboard result-scoreboard');
   const rows = [...(result?.rows ?? [])].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999));
   grid.style.gridTemplateColumns = `repeat(${target === floor && rows.length > 4 ? 4 : scoreboardColumnCount(rows.length)}, minmax(0, 1fr))`;
@@ -800,7 +843,7 @@ function createCubeViewSvg(q, azimuthDegrees, elevationDegrees) {
   return createIsometricSvg(cells, {
     azimuthDegrees, elevationDegrees, bounds: [sizeX, sizeY, q.maxHeight ?? 6],
     viewWidth: 320, viewHeight: 350, margin: 18, className: 'cube-svg',
-    edgeWidth: 0.405,
+    edgeWidth: 1.215,
     label: `方塊堆疊固定視角 ${azimuthDegrees} 度`
   });
 }
@@ -912,9 +955,11 @@ function renderPuzzleFloor(q = {}, answer = null) {
   }
   wrap.append(el('div', 'floor-title', '選出能補滿缺口的零件'), el('div', 'floor-subtitle', `目標外框 ${q.target?.join(' × ') ?? ''}　缺口 ${q.missing?.length ?? 0} 個方塊`));
   const views = el('div', 'puzzle-orthographic');
-  views.innerHTML = orthographicSvg(q.missing ?? [], { bounds: q.target ?? [3,3,2], target: true });
+  const target = q.target ?? [3,3,2];
+  const remaining = q.kind === 'remaining_solid_views';
+  views.innerHTML = orthographicSvg(remaining ? remainingSolidCells(target, q.missing ?? []) : q.missing ?? [], { bounds: target, target: !remaining });
   wrap.append(views);
-  wrap.append(el('div', 'puzzle-legend', '黃色：缺口投影（含遮住的缺口）・側圖為右側・零件可旋轉'));
+  wrap.append(el('div', 'puzzle-legend', remaining ? '綠色：現有物件・補回完整外框・零件可旋轉' : '黃色：缺口投影・舊場次題目・零件可旋轉'));
   return wrap;
 }
 function renderPokerFloor(round) {
@@ -946,6 +991,7 @@ function renderPokerFloor(round) {
   return wrap;
 }
 function renderMapFloor(q = {}, answer = null) {
+  if (q.kind === 'object_views') return renderObjectQuestion(q, answer);
   const wrap = el('div', 'floor-stack');
   wrap.append(el('div', 'floor-title', answer ? `正確位置：${answer.correctId}・${answer.correct?.heading ?? ''}` : '對照第一人稱景象與俯視地圖'));
   const layout = el('div', 'map-layout');
@@ -989,7 +1035,17 @@ function renderFirstPersonScene(q = {}) {
   perspective.innerHTML = renderPerspectiveSceneSvg(q.firstPersonView);
   return perspective;
 }
+function renderObjectQuestion(q, answer = null) {
+  const wrap = el('div', 'floor-stack object-question');
+  wrap.append(el('div', 'floor-title', answer ? '正確物件：' + answer.correctId : '看三視圖，找出相同的立體物件'));
+  const graphic = el('div', 'puzzle-orthographic');
+  const correct = answer && q.choices?.find(c => c.id === answer.correctId);
+  graphic.innerHTML = correct ? objectSvg(correct.object, true) : objectSvg(q.object);
+  wrap.append(graphic, el('div', 'puzzle-legend', '上視圖在正上方・右側視圖在右方・選項朝向固定'));
+  return wrap;
+}
 function renderMapFirstPerson(q = {}) {
+  if (q.kind === 'object_views') return renderObjectQuestion(q);
   const wrap = el('div', 'floor-stack map-first-person');
   wrap.append(el('div', 'floor-title', '固定第一人稱景象'), renderFirstPersonScene(q));
   return wrap;
@@ -1075,6 +1131,7 @@ function render(data) {
   if (!data) return;
   const structureKey = stageStructureKey(data);
   state = data;
+  if (!['paused', 'resume_countdown'].includes(data.phase)) feedbackTimeline.setScope((data.sessionId ?? '') + ':' + (data.currentRound?.id ?? data.results?.[0]?.roundId ?? ''));
   tutorialProgress = { ...data.tutorialHold, active: data.phase === 'tutorial' && Boolean(data.tutorialHold?.active), receivedAt: performance.now() };
   const idle = data.phase === 'idle';
   venue.classList.toggle('idle-mode', idle);
